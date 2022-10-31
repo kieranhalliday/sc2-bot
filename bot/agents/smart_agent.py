@@ -4,6 +4,11 @@ from pysc2.lib import units
 from bot.q_learning_table import QLearningTable
 
 
+## TODO: In order to learn with an agent, replace
+## these functions with the new agent's function
+## and update the interface agent class
+## so the random agent has the same functionality
+##
 class SmartAgent(Agent):
     def __init__(self):
         super(SmartAgent, self).__init__()
