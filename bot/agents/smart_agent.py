@@ -1,7 +1,7 @@
 from bot.agents.base_agent import Agent
 from pysc2.lib import units
 
-from bot.q_learning_table import QLearningTable
+from bot.learning.q_learning_table import QLearningTable
 
 
 ## TODO: In order to learn with an agent, replace
@@ -13,7 +13,7 @@ class SmartAgent(Agent):
     def __init__(self):
         super(SmartAgent, self).__init__()
         self.qtable = QLearningTable(self.actions)
-        self.new_game()        
+        self.new_game()
 
     def reset(self):
         super(SmartAgent, self).reset()
@@ -65,13 +65,13 @@ class SmartAgent(Agent):
         enemy_marines = self.get_enemy_units_by_type(obs, units.Terran.Marine)
 
         enemy_race = "R"
-        if (len(self.get_enemy_units_by_type(obs, units.Terran.CommandCenter))):
+        if len(self.get_enemy_units_by_type(obs, units.Terran.CommandCenter)):
             enemy_race = "T"
-        elif (len(self.get_enemy_units_by_type(obs, units.Protoss.Nexus))):
+        elif len(self.get_enemy_units_by_type(obs, units.Protoss.Nexus)):
             enemy_race = "P"
-        elif (len(self.get_enemy_units_by_type(obs, units.Zerg.Hatchery))):
-            enemy_race =  "Z"
-            
+        elif len(self.get_enemy_units_by_type(obs, units.Zerg.Hatchery)):
+            enemy_race = "Z"
+
         return (
             len(command_centers),
             len(scvs),
