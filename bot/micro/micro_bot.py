@@ -9,7 +9,7 @@ class MicroBotMixin(BotAI):
     NAME: str = "MicroBot"
 
     async def fight(self):
-        if self.supply_army > 20:
+        if self.supply_army > 50:
             for u in self.units().filter(lambda unit: unit.type_id != UnitTypeId.SCV):
                 u.attack(self.enemy_start_locations[0])
 

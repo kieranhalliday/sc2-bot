@@ -10,6 +10,20 @@ class MacroBotMixin(BotAI):
     NAME: str = "MacroBot"
     build_type = "BIO"
 
+    async def build_add_ons(self):
+        production_buildings = (
+                self.structures(UnitTypeId.BARRACKS)
+                | self.structures(UnitTypeId.FACTORY)
+                | self.structures(UnitTypeId.STARPORT)
+            )
+
+        for b in self.structures(UnitTypeId.BARRACKS).idle:
+            b(AbilityId.BUILD_REACTOR)
+        for f in self.structures(UnitTypeId.FACTORY).idle:
+            f(AbilityId.BUILD_TECHLAB)
+        for s in self.structures(UnitTypeId.STARPORT).idle:
+            s(AbilityId.BUILD_REACTOR)
+
     async def build_depots(self):
         ## TODO: build depots that aren't in the main wall
         depot_placement_positions = self.main_base_ramp.corner_depots
@@ -128,7 +142,7 @@ class MacroBotMixin(BotAI):
                 return
 
             structure_position = await self.find_placement(
-                structure_id, self.townhalls.random.position
+                structure_id, self.townhalls.random.position.towards(self.game_info.map_center, 5), addon_place=addon_place
             )
             # No position was found
             if structure_position is None:
@@ -145,16 +159,19 @@ class MacroBotMixin(BotAI):
 
     async def build_units(self):
         for rax in self.structures(UnitTypeId.BARRACKS).ready:
-            if rax.is_idle and self.can_afford(UnitTypeId.REAPER):
-                rax.train(UnitTypeId.REAPER)
-
+            if rax.is_idle:
+                rax.train(UnitTypeId.MARINE, can_afford_check=True)
+                if rax.has_reactor:
+                    rax.train(UnitTypeId.MARINE, can_afford_check=True)
         for factory in self.structures(UnitTypeId.FACTORY).ready:
-            if factory.is_idle and self.can_afford(UnitTypeId.HELLION):
-                factory.train(UnitTypeId.HELLION)
+            if factory.is_idle:
+                factory.train(UnitTypeId.SIEGETANK, can_afford_check=True)
 
         for starport in self.structures(UnitTypeId.STARPORT).ready:
-            if starport.is_idle and self.can_afford(UnitTypeId.MEDIVAC):
-                starport.train(UnitTypeId.MEDIVAC)
+            if starport.is_idle:
+                starport.train(UnitTypeId.VIKINGFIGHTER, can_afford_check=True)
+                if starport.has_reactor:
+                    starport.train(UnitTypeId.VIKINGFIGHTER, can_afford_check=True)
 
     async def build_workers(self):
         for cc in self.townhalls.ready:
@@ -213,4 +230,5 @@ class MacroBotMixin(BotAI):
         await self.expand()
         await self.build_production()
         await self.finish_buildings_under_construction()
+        await self.build_add_ons()
         await self.build_units()
