@@ -12,10 +12,10 @@ class MacroBotMixin(BotAI):
 
     async def build_add_ons(self):
         production_buildings = (
-                self.structures(UnitTypeId.BARRACKS)
-                | self.structures(UnitTypeId.FACTORY)
-                | self.structures(UnitTypeId.STARPORT)
-            )
+            self.structures(UnitTypeId.BARRACKS)
+            | self.structures(UnitTypeId.FACTORY)
+            | self.structures(UnitTypeId.STARPORT)
+        )
 
         for b in self.structures(UnitTypeId.BARRACKS).idle:
             b(AbilityId.BUILD_REACTOR)
@@ -25,7 +25,6 @@ class MacroBotMixin(BotAI):
             s(AbilityId.BUILD_REACTOR)
 
     async def build_depots(self):
-        ## TODO: build depots that aren't in the main wall
         depot_placement_positions = self.main_base_ramp.corner_depots
 
         finished_depots = self.structures(UnitTypeId.SUPPLYDEPOT) | self.structures(
@@ -43,8 +42,8 @@ class MacroBotMixin(BotAI):
         # Build depots
         if (
             self.can_afford(UnitTypeId.SUPPLYDEPOT)
-            and not self.already_pending(UnitTypeId.SUPPLYDEPOT)
             and self.supply_left < 5
+            and not self.already_pending(UnitTypeId.SUPPLYDEPOT)
         ):
             if len(depot_placement_positions) > 0:
                 target_depot_location = depot_placement_positions.pop()
@@ -52,56 +51,51 @@ class MacroBotMixin(BotAI):
                     UnitTypeId.SUPPLYDEPOT, target_depot_location
                 )
             else:
-                await self.build_structure(UnitTypeId.SUPPLYDEPOT)
+                for cc in self.townhalls:
+                    await self.build_structure(UnitTypeId.SUPPLYDEPOT)
 
         await self.handle_depot_height()
 
     async def build_production(self):
-        # 1-1-1
-        # 3-1-1
-        # 5-1-1
-        # 5-2-1
-        # 8-2-1
-        production_build_order = []
+        # 1-1-1 -> 3-1-1 -> 5-1-1 -> 5-2-1 -> 8-2-1
+        production_buidings_per_base = [3, 5, 7, 11]
         if self.build_type == "BIO":
             production_build_order = [
-                "b",
-                "f",
-                "s",
-                "b",
-                "b",
-                "b",
-                "b",
-                "f",
-                "b",
-                "b",
-                "b",
+                UnitTypeId.BARRACKS,
+                UnitTypeId.FACTORY,
+                UnitTypeId.STARPORT,
+                UnitTypeId.BARRACKS,
+                UnitTypeId.BARRACKS,
+                UnitTypeId.BARRACKS,
+                UnitTypeId.BARRACKS,
+                UnitTypeId.FACTORY,
+                UnitTypeId.BARRACKS,
+                UnitTypeId.BARRACKS,
+                UnitTypeId.BARRACKS,
             ]
-            production_buildings = (
+            num_production_buildings = len(
                 self.structures(UnitTypeId.BARRACKS)
                 | self.structures(UnitTypeId.FACTORY)
                 | self.structures(UnitTypeId.STARPORT)
             )
 
-            ccs = self.townhalls.ready
+            # Avoid index errors
+            ccs = max(
+                min(
+                    len(self.townhalls.ready) - 1, len(production_buidings_per_base) - 1
+                ),
+                0,
+            )
+            next_production_building = production_build_order[num_production_buildings]
 
-            if len(ccs) <= 1 and len(production_buildings) <= 3:
-                # If no buildings build barracks
-                if len(production_buildings) == 0 and not self.already_pending(
-                    UnitTypeId.BARRACKS
-                ):
+            if num_production_buildings < production_buidings_per_base[ccs]:
+                if num_production_buildings == 0:
                     await self.build_structure(
-                        UnitTypeId.BARRACKS,
+                        next_production_building,
                         self.main_base_ramp.barracks_correct_placement,
                     )
-                elif len(production_buildings) == 1 and not self.already_pending(
-                    UnitTypeId.FACTORY
-                ):
-                    await self.build_structure(UnitTypeId.FACTORY)
-                elif len(production_buildings) == 2 and not self.already_pending(
-                    UnitTypeId.STARPORT
-                ):
-                    await self.build_structure(UnitTypeId.STARPORT)
+
+                await self.build_structure(next_production_building)
 
         elif self.build_type == "MECH":
             pass
@@ -128,50 +122,66 @@ class MacroBotMixin(BotAI):
                 worker.build(UnitTypeId.REFINERY, vg)
 
     async def build_structure(self, structure_id, position=None, can_afford_check=True):
-        # Addons for production buildings
-        addon_place = structure_id in [
+        army_building = structure_id in [
             UnitTypeId.BARRACKS,
             UnitTypeId.FACTORY,
             UnitTypeId.STARPORT,
         ]
 
-        structure_position = position
+        if position == None:
+            if army_building:
+                near = self.main_base_ramp.barracks_correct_placement.to2
+            elif len(self.townhalls) > 0:
+                near = self.townhalls.random.position.towards(
+                    self.game_info.map_center, 10
+                ).random_on_distance(4)
+            else:
+                near = self.all_own_units.random.position
 
-        if structure_position == None:
-            if len(self.townhalls) == 0:
-                return
-
-            structure_position = await self.find_placement(
-                structure_id, self.townhalls.random.position.towards(self.game_info.map_center, 5), addon_place=addon_place
+            position = await self.find_placement(
+                structure_id,
+                near,
+                placement_step=4,
+                max_distance=20,
             )
             # No position was found
-            if structure_position is None:
+            if position is None:
+                print("No position found for ", structure_id)
                 return
 
-        worker = self.select_build_worker(structure_position)
+        worker = self.select_build_worker(position)
         if worker is None:
             return
 
-        if await self.can_place_single(structure_id, structure_position):
-            worker.build(
-                structure_id, structure_position, can_afford_check=can_afford_check
-            )
+        if await self.can_place_single(structure_id, position):
+            worker.build(structure_id, position, can_afford_check=can_afford_check)
 
     async def build_units(self):
+        center = self.game_info.map_center
+        rally_point = center
+        if len(self.townhalls) > 0:
+            rally_point = self.townhalls.closest_to(
+                self.enemy_start_locations[0]
+            ).position.towards(center, 5)
+
         for rax in self.structures(UnitTypeId.BARRACKS).ready:
             if rax.is_idle:
                 rax.train(UnitTypeId.MARINE, can_afford_check=True)
                 if rax.has_reactor:
                     rax.train(UnitTypeId.MARINE, can_afford_check=True)
+            rax(AbilityId.RALLY_UNITS, rally_point)
+
         for factory in self.structures(UnitTypeId.FACTORY).ready:
             if factory.is_idle:
                 factory.train(UnitTypeId.SIEGETANK, can_afford_check=True)
+            factory(AbilityId.RALLY_UNITS, rally_point)
 
         for starport in self.structures(UnitTypeId.STARPORT).ready:
             if starport.is_idle:
                 starport.train(UnitTypeId.VIKINGFIGHTER, can_afford_check=True)
                 if starport.has_reactor:
                     starport.train(UnitTypeId.VIKINGFIGHTER, can_afford_check=True)
+            starport(AbilityId.RALLY_UNITS, rally_point)
 
     async def build_workers(self):
         for cc in self.townhalls.ready:
@@ -215,6 +225,14 @@ class MacroBotMixin(BotAI):
             else:
                 depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
 
+    async def manage_cc_actions(self):
+        for cc in self.townhalls:
+            mfs = self.mineral_field.closer_than(10, cc)
+            if mfs:
+                mf = max(mfs, key=lambda x: x.mineral_contents)
+                cc(AbilityId.RALLY_WORKERS, mf)
+                cc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf, can_afford_check=True)
+
     async def on_step_macro(self, iteration: int):
         """
         This code runs continually throughout the game
@@ -223,6 +241,7 @@ class MacroBotMixin(BotAI):
         # Macro cycle
         if iteration % 25 == 0:
             await self.distribute_workers()
+            await self.manage_cc_actions()
 
         await self.build_workers()
         await self.build_depots()

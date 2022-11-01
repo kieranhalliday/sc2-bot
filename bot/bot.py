@@ -1,5 +1,5 @@
-from bot.macro.macro_bot import MacroBotMixin
-from bot.micro.micro_bot import MicroBotMixin
+from bot.macro_bot import MacroBotMixin
+from bot.micro_bot import MicroBotMixin
 from sc2.bot_ai import Race
 from sc2.data import Result
 
