@@ -4,11 +4,20 @@ from pathlib import Path
 
 
 class QLearningTable:
+
+    savedStateFilePath = Path("./bot/learning/saved_states/saved_state.csv")
+    
     def __init__(self, actions, learning_rate=0.01, reward_decay=0.9):
         self.actions = actions
         self.learning_rate = learning_rate
         self.reward_decay = reward_decay
-        self.q_table = pd.DataFrame(columns=self.actions, dtype=np.float64)
+
+        try:
+            self.q_table = pd.read_csv(self.savedStateFilePath)
+            print("Loading saved data from ", self.savedStateFilePath.name)
+        except:
+            print("No saved learning found")
+            self.q_table = pd.DataFrame(columns=self.actions, dtype=np.float64)
 
     def choose_action(self, observation, e_greedy=0.9):
         self.check_state_exist(observation)
@@ -26,9 +35,9 @@ class QLearningTable:
         q_predict = self.q_table.loc[s, a]
         if s_ != "terminal":
             q_target = r + self.reward_decay * self.q_table.loc[s_, :].max()
-            self.save_csv("./saved_states/saved_state.csv")
         else:
             q_target = r
+            self.save_csv()
         self.q_table.loc[s, a] += self.learning_rate * (q_target - q_predict)
 
     def check_state_exist(self, state):
@@ -39,7 +48,6 @@ class QLearningTable:
                 )
             )
 
-    def save_csv(self, filepath):
-        filepath = Path(filepath)
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        self.q_table.to_csv(filepath)
+    def save_csv(self):
+        self.savedStateFilePath.parent.mkdir(parents=True, exist_ok=True)
+        self.q_table.to_csv(self.savedStateFilePath)

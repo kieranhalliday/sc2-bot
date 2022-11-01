@@ -4,6 +4,8 @@ from sc2.bot_ai import Race
 from sc2.data import Result
 
 
+## TODO: Move this functionality into the base agent class
+## to be used in the smart_agent and random agent
 class CompetitiveBot(MacroBotMixin, MicroBotMixin):
     NAME: str = "ArchonBot"
     RACE: Race = Race.Terran

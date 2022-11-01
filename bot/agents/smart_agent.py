@@ -8,6 +8,9 @@ from bot.learning.q_learning_table import QLearningTable
 ## these functions with the new agent's function
 ## and update the interface agent class
 ## so the random agent has the same functionality
+## Might as well start developping this agent now
+## since the functionalities will be the same and combining them
+## later will just be harder.
 ##
 class SmartAgent(Agent):
     def __init__(self):

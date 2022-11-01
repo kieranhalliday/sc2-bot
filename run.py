@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import logging
 import aiohttp
+from bot.agents.smart_agent import SmartAgent
 import sc2
 from sc2.main import run_game
 from sc2.data import Race, Difficulty
@@ -102,11 +103,11 @@ def parse_arguments():
 
 def load_bot(args):
     # Load bot
-    competitive_bot = CompetitiveBot()
+    competitive_bot = SmartAgent()
     # Add opponent_id to the bot class (accessed through self.opponent_id)
     competitive_bot.opponent_id = args.OpponentId
 
-    return Bot(CompetitiveBot.RACE, competitive_bot)
+    return Bot(competitive_bot.RACE, competitive_bot)
 
 
 def run():
