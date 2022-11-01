@@ -114,3 +114,11 @@ class SmartAgent(Agent):
         self.previous_state = state
         self.previous_action = action
         return getattr(self, action)(obs)
+
+
+    ## TODO:
+    # What needs to happen is have to step function here to learn
+    # then use that learning in the async on_step function that 
+    # the normal game uses to run the steps
+    # So it will learn what steps to take then execute the same step name
+    # but with different implementation for learning mode and real mode
