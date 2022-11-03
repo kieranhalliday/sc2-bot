@@ -96,7 +96,9 @@ class MacroBotMixin(BotAI):
             ]
 
             if num_production_buildings < production_buidings_per_base[ccs]:
-                if num_production_buildings == 0:
+                if num_production_buildings == 0 and not self.already_pending(
+                    next_production_building
+                ):
                     await self.build_structure(
                         next_production_building,
                         self.main_base_ramp.barracks_correct_placement,
@@ -163,6 +165,29 @@ class MacroBotMixin(BotAI):
 
         if await self.can_place_single(structure_id, position):
             worker.build(structure_id, position, can_afford_check=can_afford_check)
+
+    async def build_upgrade_buildings(self):
+        if (
+            len(self.structures(UnitTypeId.BARRACKS)) >= 3
+            and len(self.structures(UnitTypeId.ENGINEERINGBAY)) < 1
+        ):
+            await self.build_structure(UnitTypeId.ENGINEERINGBAY)
+        if len(
+            self.structures(UnitTypeId.ENGINEERINGBAY)
+        ) == 1 and not self.already_pending(UnitTypeId.ENGINEERINGBAY):
+            await self.build_structure(UnitTypeId.ENGINEERINGBAY)
+
+        if (
+            not self.structures(UnitTypeId.ARMORY)
+            and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
+            > 0.5
+        ):
+            await self.build_structure(UnitTypeId.ARMORY)
+
+        if len(self.structures(UnitTypeId.FACTORY)) > 1 and not self.already_pending(
+            UnitTypeId.ARMORY
+        ):
+            await self.build_structure(UnitTypeId.ARMORY)
 
     async def build_units(self):
         center = self.game_info.map_center
@@ -241,57 +266,55 @@ class MacroBotMixin(BotAI):
                 cc(AbilityId.RALLY_WORKERS, mf)
                 cc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf, can_afford_check=True)
 
-    async def handle_upgrades(self):
-        eng_bays = self.structures(UnitTypeId.ENGINEERINGBAY)
-        armories = self.structures(UnitTypeId.ARMORY).ready
-        rax = self.structures(UnitTypeId.BARRACKS)
-        factories = self.structures(UnitTypeId.FACTORY)
-        ports = self.structures(UnitTypeId.STARPORT)
+    async def handle_upgrades(
+        self,
+        ebay_upgrade_order=None,
+        armory_upgrade_order=None,
+        prioritize_armory=False,
+    ):
 
-        if len(rax) >= 3 and len(eng_bays) < 2:
-            await self.build_structure(UnitTypeId.ENGINEERINGBAY)
+        await self.build_upgrade_buildings()
 
-        if (
-            not self.structures(UnitTypeId.ARMORY)
-            and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
-            > 0.5
-        ):
-            await self.build_structure(UnitTypeId.ARMORY)
+        if ebay_upgrade_order is None:
+            ebay_upgrade_order = [
+                UpgradeId.TERRANINFANTRYWEAPONSLEVEL1,
+                UpgradeId.TERRANINFANTRYARMORSLEVEL1,
+                UpgradeId.TERRANINFANTRYWEAPONSLEVEL2,
+                UpgradeId.TERRANINFANTRYARMORSLEVEL2,
+                UpgradeId.TERRANINFANTRYWEAPONSLEVEL3,
+                UpgradeId.TERRANINFANTRYARMORSLEVEL3,
+                UpgradeId.HISECAUTOTRACKING,
+                UpgradeId.TERRANBUILDINGARMOR,
+            ]
 
+        if armory_upgrade_order is None:
+            armory_upgrade_order = [
+                UpgradeId.TERRANVEHICLEWEAPONSLEVEL1,
+                UpgradeId.TERRANVEHICLEWEAPONSLEVEL2,
+                UpgradeId.TERRANSHIPWEAPONSLEVEL1,
+                UpgradeId.TERRANSHIPWEAPONSLEVEL2,
+                UpgradeId.TERRANSHIPWEAPONSLEVEL3,
+                UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1,
+                UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2,
+                UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3,
+                UpgradeId.TERRANVEHICLEWEAPONSLEVEL3,
+            ]
+
+        # TODO THESE LOOPS RUIN THE PERFORMANCE OF THE BOT
         if self.structures(UnitTypeId.ENGINEERINGBAY).idle:
             ebay = self.structures(UnitTypeId.ENGINEERINGBAY).idle.first
-            # Level 1
-            if not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1):
-                ebay(
-                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYWEAPONSLEVEL1,
-                    can_afford_check=True,
-                )
-            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1):
-                ebay(
-                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYARMORLEVEL1,
-                    can_afford_check=True,
-                )
-            # Level 2
-            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2):
-                ebay(
-                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYWEAPONSLEVEL2,
-                    can_afford_check=True,
-                )
-            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL2):
-                ebay(
-                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYARMORLEVEL2,
-                    can_afford_check=True,
-                )
-            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3):
-                ebay(
-                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYWEAPONSLEVEL3,
-                    can_afford_check=True,
-                )
-            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL3):
-                ebay(
-                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYARMORLEVEL3,
-                    can_afford_check=True,
-                )
+
+            for upgrade in ebay_upgrade_order:
+                if not self.already_pending_upgrade(upgrade):
+                    ebay.research(upgrade, can_afford_check=True)
+                    break
+
+        if self.structures(UnitTypeId.ARMORY).idle:
+            armory = self.structures(UnitTypeId.ARMORY).idle.first
+            for upgrade in armory_upgrade_order:
+                if not self.already_pending_upgrade(upgrade):
+                    armory.research(upgrade, can_afford_check=True)
+                    break
 
     async def on_step_macro(self, iteration: int):
         """
