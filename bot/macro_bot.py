@@ -1,6 +1,11 @@
+import random
+from typing import Optional, Union
+
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
+from sc2.ids.upgrade_id import UpgradeId
+from sc2.position import Point2, Point3
 
 
 ## Bot to handle macro behaviors
@@ -86,7 +91,9 @@ class MacroBotMixin(BotAI):
                 ),
                 0,
             )
-            next_production_building = production_build_order[num_production_buildings]
+            next_production_building = production_build_order[
+                min(num_production_buildings, len(production_build_order) - 1)
+            ]
 
             if num_production_buildings < production_buidings_per_base[ccs]:
                 if num_production_buildings == 0:
@@ -133,7 +140,7 @@ class MacroBotMixin(BotAI):
                 near = self.main_base_ramp.barracks_correct_placement.to2
             elif len(self.townhalls) > 0:
                 near = self.townhalls.random.position.towards(
-                    self.game_info.map_center, 10
+                    self.game_info.map_center, 6
                 ).random_on_distance(4)
             else:
                 near = self.all_own_units.random.position
@@ -143,6 +150,7 @@ class MacroBotMixin(BotAI):
                 near,
                 placement_step=4,
                 max_distance=20,
+                addon_place=army_building,
             )
             # No position was found
             if position is None:
@@ -233,6 +241,58 @@ class MacroBotMixin(BotAI):
                 cc(AbilityId.RALLY_WORKERS, mf)
                 cc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf, can_afford_check=True)
 
+    async def handle_upgrades(self):
+        eng_bays = self.structures(UnitTypeId.ENGINEERINGBAY)
+        armories = self.structures(UnitTypeId.ARMORY).ready
+        rax = self.structures(UnitTypeId.BARRACKS)
+        factories = self.structures(UnitTypeId.FACTORY)
+        ports = self.structures(UnitTypeId.STARPORT)
+
+        if len(rax) >= 3 and len(eng_bays) < 2:
+            await self.build_structure(UnitTypeId.ENGINEERINGBAY)
+
+        if (
+            not self.structures(UnitTypeId.ARMORY)
+            and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
+            > 0.5
+        ):
+            await self.build_structure(UnitTypeId.ARMORY)
+
+        if self.structures(UnitTypeId.ENGINEERINGBAY).idle:
+            ebay = self.structures(UnitTypeId.ENGINEERINGBAY).idle.first
+            # Level 1
+            if not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1):
+                ebay(
+                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYWEAPONSLEVEL1,
+                    can_afford_check=True,
+                )
+            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1):
+                ebay(
+                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYARMORLEVEL1,
+                    can_afford_check=True,
+                )
+            # Level 2
+            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2):
+                ebay(
+                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYWEAPONSLEVEL2,
+                    can_afford_check=True,
+                )
+            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL2):
+                ebay(
+                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYARMORLEVEL2,
+                    can_afford_check=True,
+                )
+            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3):
+                ebay(
+                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYWEAPONSLEVEL3,
+                    can_afford_check=True,
+                )
+            elif not self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL3):
+                ebay(
+                    AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYARMORLEVEL3,
+                    can_afford_check=True,
+                )
+
     async def on_step_macro(self, iteration: int):
         """
         This code runs continually throughout the game
@@ -246,8 +306,99 @@ class MacroBotMixin(BotAI):
         await self.build_workers()
         await self.build_depots()
         await self.build_refineries()
+        await self.handle_upgrades()
         await self.expand()
         await self.build_production()
         await self.finish_buildings_under_construction()
         await self.build_add_ons()
         await self.build_units()
+
+    async def find_placement(
+        self,
+        building: Union[UnitTypeId, AbilityId],
+        near: Point2,
+        max_distance: int = 20,
+        random_alternative: bool = True,
+        placement_step: int = 2,
+        addon_place: bool = False,
+    ) -> Optional[Point2]:
+        """Finds a placement location for building.
+
+        Example::
+
+            if self.townhalls:
+                cc = self.townhalls[0]
+                depot_position = await self.find_placement(UnitTypeId.SUPPLYDEPOT, near=cc)
+
+        :param building:
+        :param near:
+        :param max_distance:
+        :param random_alternative:
+        :param placement_step:
+        :param addon_place:"""
+
+        assert isinstance(building, (AbilityId, UnitTypeId))
+        assert isinstance(near, Point2), f"{near} is no Point2 object"
+
+        if isinstance(building, UnitTypeId):
+            building = self.game_data.units[building.value].creation_ability.id
+
+        if await self.can_place_single(building, near) and (
+            not addon_place
+            or await self.can_place_single(
+                UnitTypeId.SUPPLYDEPOT, near.offset((2.5, -0.5))
+            )
+        ):
+            return near
+
+        if max_distance == 0:
+            return None
+
+        for distance in range(placement_step, max_distance, placement_step):
+            possible_positions = [
+                Point2(p).offset(near).to2
+                for p in (
+                    [
+                        (dx, -distance)
+                        for dx in range(-distance, distance + 1, placement_step)
+                    ]
+                    + [
+                        (dx, distance)
+                        for dx in range(-distance, distance + 1, placement_step)
+                    ]
+                    + [
+                        (-distance, dy)
+                        for dy in range(-distance, distance + 1, placement_step)
+                    ]
+                    + [
+                        (distance, dy)
+                        for dy in range(-distance, distance + 1, placement_step)
+                    ]
+                )
+            ]
+            res = await self.client._query_building_placement_fast(
+                building, possible_positions
+            )
+            # Filter all positions if building can be placed
+            possible = [p for r, p in zip(res, possible_positions) if r]
+
+            # The find add on place logic did not work in the sc2 version of this function
+            if addon_place:
+                # Filter remaining positions if addon can be placed
+                res = []
+
+                for p in possible:
+                    res.append(
+                        await self.can_place_single(
+                            UnitTypeId.SUPPLYDEPOT, p.offset((2.5, -0.5))
+                        )
+                    )
+                possible = [p for r, p in zip(res, possible) if r]
+
+            if not possible:
+                continue
+
+            if random_alternative:
+                return random.choice(possible)
+            return min(possible, key=lambda p: p.distance_to_point2(near))
+        return None

@@ -700,10 +700,14 @@ class BotAI(BotAIInternal):
 
             if addon_place:
                 # Filter remaining positions if addon can be placed
-                res = await self.client._query_building_placement_fast(
-                    AbilityId.TERRANBUILDDROP_SUPPLYDEPOTDROP,
-                    [p.offset((2.5, -0.5)) for p in possible],
-                )
+                res = []
+
+                for p in possible:
+                    res.append(await self.can_place_single(
+                        UnitTypeId.SUPPLYDEPOT,
+                        p.offset((2.5, -0.5))
+                        )
+                    )
                 possible = [p for r, p in zip(res, possible) if r]
 
             if not possible:
