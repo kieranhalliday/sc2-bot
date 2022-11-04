@@ -29,3 +29,4 @@ class CompetitiveBot(MacroBotMixin, MicroBotMixin):
         Do things here after the game ends
         """
         print("Game ended.")
+        print(result)

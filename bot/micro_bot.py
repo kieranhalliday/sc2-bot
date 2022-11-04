@@ -13,7 +13,7 @@ class MicroBotMixin(ReaperMicroMixin):
 
     async def fight(self):
         if self.supply_army > 50:
-            for u in self.units().filter(
+            for u in self.units().idle.filter(
                 lambda unit: unit.type_id != UnitTypeId.SCV
                 and unit.type_id != UnitTypeId.MULE
             ):
@@ -26,10 +26,10 @@ class MicroBotMixin(ReaperMicroMixin):
                 u.attack(random.choice(possible_attack_locations))
 
     async def tank_micro(self):
-        siege_tanks = self.units(UnitTypeId.SIEGETANK) | self.units(
+        idle_tanks = self.units(UnitTypeId.SIEGETANK) | self.units(
             UnitTypeId.SIEGETANKSIEGED
-        )
-        for st in siege_tanks.idle:
+        ).idle
+        for st in idle_tanks:
             st(AbilityId.SIEGEMODE_SIEGEMODE)
 
     async def on_step_micro(self, iteration: int):
@@ -37,6 +37,6 @@ class MicroBotMixin(ReaperMicroMixin):
         This code runs continually throughout the game
         Populate this function with whatever your bot should do!
         """
-        await self.tank_micro()
+        # await self.tank_micro()
         await self.reaper_micro(iteration)
         await self.fight()

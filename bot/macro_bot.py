@@ -8,6 +8,14 @@ from sc2.ids.upgrade_id import UpgradeId
 from sc2.position import Point2, Point3
 
 
+# TODO
+# Wall other bases that aren't the main
+# get build incomplete buildings to work
+# create repair function
+# Be able to build 2 production buildings at once,
+#   atm it only start the next one once the previous once is finished
+# Monitor the performance of all the functions
+
 ## Bot to handle macro behaviors
 ## Desgined to be combined with the MicroBot
 ## and extended in the main bot class
@@ -23,7 +31,10 @@ class MacroBotMixin(BotAI):
         )
 
         for b in self.structures(UnitTypeId.BARRACKS).idle:
-            b(AbilityId.BUILD_REACTOR)
+            if len(self.structures(UnitTypeId.BARRACKSTECHLAB)) == 0:
+                b(AbilityId.BUILD_TECHLAB)
+            else:
+                b(AbilityId.BUILD_REACTOR)
         for f in self.structures(UnitTypeId.FACTORY).idle:
             f(AbilityId.BUILD_TECHLAB)
         for s in self.structures(UnitTypeId.STARPORT).idle:
@@ -47,7 +58,7 @@ class MacroBotMixin(BotAI):
         # Build depots
         if (
             self.can_afford(UnitTypeId.SUPPLYDEPOT)
-            and self.supply_left < 5
+            and self.supply_left < 5 * len(self.townhalls)
             and not self.already_pending(UnitTypeId.SUPPLYDEPOT)
         ):
             if len(depot_placement_positions) > 0:
@@ -56,8 +67,22 @@ class MacroBotMixin(BotAI):
                     UnitTypeId.SUPPLYDEPOT, target_depot_location
                 )
             else:
+                max_minerals_left = 0
+
                 for cc in self.townhalls:
-                    await self.build_structure(UnitTypeId.SUPPLYDEPOT)
+                    mfs = self.mineral_field.closer_than(10, cc)
+                    if mfs:
+                        minerals_left = sum(map(lambda mf: mf.mineral_contents, mfs))
+                        if minerals_left > max_minerals_left:
+                            latest_cc = cc
+
+                    if latest_cc:
+                        await self.build_structure(
+                            UnitTypeId.SUPPLYDEPOT,
+                            latest_cc.position.towards(
+                                self.game_info.map_center, 4
+                            ).random_on_distance(6),
+                        )
 
         await self.handle_depot_height()
 
@@ -141,9 +166,9 @@ class MacroBotMixin(BotAI):
             if army_building:
                 near = self.main_base_ramp.barracks_correct_placement.to2
             elif len(self.townhalls) > 0:
-                near = self.townhalls.random.position.towards(
-                    self.game_info.map_center, 6
-                ).random_on_distance(4)
+                near = self.start_location.towards(
+                    self.game_info.map_center, 4
+                ).random_on_distance(3)
             else:
                 near = self.all_own_units.random.position
 
@@ -172,9 +197,10 @@ class MacroBotMixin(BotAI):
             and len(self.structures(UnitTypeId.ENGINEERINGBAY)) < 1
         ):
             await self.build_structure(UnitTypeId.ENGINEERINGBAY)
-        if len(
-            self.structures(UnitTypeId.ENGINEERINGBAY)
-        ) == 1 and not self.already_pending(UnitTypeId.ENGINEERINGBAY):
+        if (
+            len(self.structures(UnitTypeId.ENGINEERINGBAY)) == 1
+            and self.already_pending(UnitTypeId.ENGINEERINGBAY) == 1
+        ):
             await self.build_structure(UnitTypeId.ENGINEERINGBAY)
 
         if (
@@ -300,7 +326,6 @@ class MacroBotMixin(BotAI):
                 UpgradeId.TERRANVEHICLEWEAPONSLEVEL3,
             ]
 
-        # TODO THESE LOOPS RUIN THE PERFORMANCE OF THE BOT
         if self.structures(UnitTypeId.ENGINEERINGBAY).idle:
             ebay = self.structures(UnitTypeId.ENGINEERINGBAY).idle.first
 
@@ -315,6 +340,13 @@ class MacroBotMixin(BotAI):
                 if not self.already_pending_upgrade(upgrade):
                     armory.research(upgrade, can_afford_check=True)
                     break
+
+        if self.structures(UnitTypeId.BARRACKSTECHLAB).idle:
+            tech_lab = self.structures(UnitTypeId.BARRACKSTECHLAB).idle.first
+            if not self.already_pending_upgrade(UpgradeId.STIMPACK):
+                tech_lab.research(UpgradeId.STIMPACK, can_afford_check=True)
+            elif not self.already_pending(AbilityId.RESEARCH_COMBATSHIELD):
+                tech_lab(AbilityId.RESEARCH_COMBATSHIELD, can_afford_check=True)
 
     async def on_step_macro(self, iteration: int):
         """
