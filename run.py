@@ -76,7 +76,7 @@ def parse_arguments():
     parser.add_argument("--Sc2Version", type=str, help="The version of Starcraft 2 to load.")
     parser.add_argument("--ComputerRace", type=str, default="Random",
                         help="Computer race. One of [Terran, Zerg, Protoss, Random]. Default is Terran. Only for local play.")
-    parser.add_argument("--ComputerDifficulty", type=str, default="VeryHard",
+    parser.add_argument("--ComputerDifficulty", type=str, default="CheatInsane",
                         help=f"Computer difficulty. One of [VeryEasy, Easy, Medium, MediumHard, Hard, Harder, VeryHard, CheatVision, CheatMoney, CheatInsane]. Default is VeryEasy. Only for local play.")
     parser.add_argument("--Map", type=str, default="Simple64",
                         help="The name of the map to use. Default is Simple64. Only for local play.")
@@ -84,6 +84,7 @@ def parse_arguments():
     # Both Ladder and Local play arguments
     parser.add_argument("--OpponentId", type=str, help="A unique value identifying opponent.")
     parser.add_argument("--Realtime", action='store_true', help="Whether to use realtime mode. Default is false.")
+    parser.add_argument("--Games", type=int, default=1, help="Number of games to play. Default is 1")
 
     args, unknown_args = parser.parse_known_args()
 
@@ -123,10 +124,12 @@ def run():
     else:
         # Local game
         print("Starting local game...")
-        run_game(sc2.maps.get(args.Map),
-                     [bot, Computer(Race[args.ComputerRace], Difficulty[args.ComputerDifficulty])],
-                     realtime=args.Realtime,
-                     sc2_version=args.Sc2Version, )
+
+        for x in range(args.Games):
+            run_game(sc2.maps.get(args.Map),
+                        [bot, Computer(Race[args.ComputerRace], Difficulty[args.ComputerDifficulty])],
+                        realtime=args.Realtime,
+                        sc2_version=args.Sc2Version, )
 
 
 # Start game
