@@ -21,11 +21,7 @@ class ReaperMicroMixin(BotAI):
                     r.position, distance=2
                 ) | Helpers.neighbors8(r.position, distance=4)
                 # filter points that are pathable
-                retreatPoints = {
-                    x
-                    for x in retreatPoints
-                    if Helpers.inPathingGrid(x, self.game_info.pathing_grid)
-                }
+                retreatPoints = {x for x in retreatPoints if self.in_pathing_grid(x)}
                 if retreatPoints:
                     closestEnemy = enemyThreatsClose.closest_to(r)
                     retreatPoint = closestEnemy.position.furthest(retreatPoints)
@@ -85,11 +81,7 @@ class ReaperMicroMixin(BotAI):
                     r.position, distance=2
                 ) | Helpers.neighbors8(r.position, distance=4)
                 # filter points that are pathable by a reaper
-                retreatPoints = {
-                    x
-                    for x in retreatPoints
-                    if Helpers.inPathingGrid(x, self.game_info.pathing_grid)
-                }
+                retreatPoints = {x for x in retreatPoints if self.in_pathing_grid(x)}
                 if retreatPoints:
                     closestEnemy = enemyThreatsVeryClose.closest_to(r)
                     retreatPoint = max(

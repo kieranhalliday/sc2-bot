@@ -1,14 +1,15 @@
 import random
+
+from bot.micro.marine_micro import MarineMicroMixin
 from bot.micro.reaper_micro import ReaperMicroMixin
-from sc2.bot_ai import BotAI
-from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
+from sc2.ids.unit_typeid import UnitTypeId
 
 
 ## Bot to handle micro behaviors
 ## Desgined to be combined with the MacroBot
 ## and extended in the main bot class
-class MicroBotMixin(ReaperMicroMixin):
+class MicroBotMixin(ReaperMicroMixin, MarineMicroMixin):
     NAME: str = "MicroBot"
 
     async def fight(self):
@@ -26,9 +27,7 @@ class MicroBotMixin(ReaperMicroMixin):
                 u.attack(random.choice(possible_attack_locations))
 
     async def tank_micro(self):
-        idle_tanks = self.units(UnitTypeId.SIEGETANK) | self.units(
-            UnitTypeId.SIEGETANKSIEGED
-        ).idle
+        idle_tanks = self.units(UnitTypeId.SIEGETANK).idle
         for st in idle_tanks:
             st(AbilityId.SIEGEMODE_SIEGEMODE)
 
@@ -37,6 +36,7 @@ class MicroBotMixin(ReaperMicroMixin):
         This code runs continually throughout the game
         Populate this function with whatever your bot should do!
         """
-        # await self.tank_micro()
         await self.reaper_micro(iteration)
+        await self.marine_micro(iteration)
+        await self.tank_micro()
         await self.fight()

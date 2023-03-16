@@ -14,7 +14,6 @@ from sc2.position import Point2, Point3
 # create repair function
 # Be able to build 2 production buildings at once,
 #   atm it only start the next one once the previous once is finished
-# Monitor the performance of all the functions
 
 ## Bot to handle macro behaviors
 ## Desgined to be combined with the MicroBot
@@ -69,6 +68,7 @@ class MacroBotMixin(BotAI):
             else:
                 max_minerals_left = 0
 
+                latest_cc = None
                 for cc in self.townhalls:
                     mfs = self.mineral_field.closer_than(10, cc)
                     if mfs:
@@ -76,7 +76,7 @@ class MacroBotMixin(BotAI):
                         if minerals_left > max_minerals_left:
                             latest_cc = cc
 
-                    if latest_cc:
+                    if latest_cc is not None:
                         await self.build_structure(
                             UnitTypeId.SUPPLYDEPOT,
                             latest_cc.position.towards(
@@ -121,15 +121,16 @@ class MacroBotMixin(BotAI):
             ]
 
             if num_production_buildings < production_buidings_per_base[ccs]:
-                if num_production_buildings == 0 and not self.already_pending(
-                    next_production_building
-                ):
-                    await self.build_structure(
-                        next_production_building,
-                        self.main_base_ramp.barracks_correct_placement,
-                    )
+                if not self.already_pending(next_production_building):
+                    if num_production_buildings == 0:
+                        await self.build_structure(
+                            next_production_building,
+                            self.main_base_ramp.barracks_correct_placement,
+                        )
+                    else:
+                        await self.build_structure(next_production_building)
 
-                await self.build_structure(next_production_building)
+                return
 
         elif self.build_type == "MECH":
             pass
@@ -167,7 +168,7 @@ class MacroBotMixin(BotAI):
                 near = self.main_base_ramp.barracks_correct_placement.to2
             elif len(self.townhalls) > 0:
                 near = self.start_location.towards(
-                    self.game_info.map_center, 4
+                    self.game_info.map_center, 3
                 ).random_on_distance(3)
             else:
                 near = self.all_own_units.random.position
@@ -179,7 +180,6 @@ class MacroBotMixin(BotAI):
                 max_distance=20,
                 addon_place=army_building,
             )
-            # No position was found
             if position is None:
                 print("No position found for ", structure_id)
                 return
@@ -195,6 +195,7 @@ class MacroBotMixin(BotAI):
         if (
             len(self.structures(UnitTypeId.BARRACKS)) >= 3
             and len(self.structures(UnitTypeId.ENGINEERINGBAY)) < 1
+            and self.already_pending(UnitTypeId.ENGINEERINGBAY) < 1
         ):
             await self.build_structure(UnitTypeId.ENGINEERINGBAY)
         if (
@@ -212,7 +213,11 @@ class MacroBotMixin(BotAI):
 
         if len(self.structures(UnitTypeId.FACTORY)) > 1 and not self.already_pending(
             UnitTypeId.ARMORY
-        ):
+        ) and self.already_pending_upgrade(
+            UpgradeId.TERRANINFANTRYWEAPONSLEVEL1
+        ) > 0.5 and self.already_pending_upgrade(
+            UpgradeId.TERRANINFANTRYARMORSLEVEL1
+        ) > 0.5:
             await self.build_structure(UnitTypeId.ARMORY)
 
     async def build_units(self):
@@ -260,6 +265,7 @@ class MacroBotMixin(BotAI):
         if (
             self.can_afford(UnitTypeId.COMMANDCENTER)
             and self.units(UnitTypeId.SCV).amount >= self.townhalls.amount * 18
+            and self.already_pending(UnitTypeId.COMMANDCENTER) <= len(self.townhalls.ready)
             and await self.get_next_expansion() is not None
         ):
             await self.expand_now()
@@ -355,9 +361,9 @@ class MacroBotMixin(BotAI):
         """
         # Macro cycle
         if iteration % 25 == 0:
-            await self.distribute_workers()
             await self.manage_cc_actions()
 
+        await self.distribute_workers()
         await self.build_workers()
         await self.build_depots()
         await self.build_refineries()
@@ -457,3 +463,44 @@ class MacroBotMixin(BotAI):
                 return random.choice(possible)
             return min(possible, key=lambda p: p.distance_to_point2(near))
         return None
+
+    def select_build_worker(self, pos, force=False, excludeTags=[]):
+        for worker in self.workers:
+            if (
+                not worker.orders
+                or len(worker.orders) == 1
+                and worker.orders[0].ability.id
+                in [AbilityId.MOVE, AbilityId.HARVEST_GATHER, AbilityId.HARVEST_RETURN]
+                and worker.tag not in excludeTags
+            ):
+                return worker
+        return self.workers.random if force else None
+
+    def already_pending(self, unit_type):
+        ability = self.game_data.units[unit_type.value].creation_ability
+        unitAttributes = self.game_data.units[unit_type.value].attributes
+
+        if 8 not in unitAttributes and any(
+            o.ability == ability for w in (self.units.not_structure) for o in w.orders
+        ):
+            return sum(
+                [
+                    o.ability == ability
+                    for w in (self.units - self.workers)
+                    for o in w.orders
+                ]
+            )
+        # following checks for unit production in a building queue, like queen, also checks if hatch is morphing to LAIR
+        elif any(
+            o.ability.id == ability.id for w in (self.units.structure) for o in w.orders
+        ):
+            return sum(
+                [
+                    o.ability.id == ability.id
+                    for w in (self.units.structure)
+                    for o in w.orders
+                ]
+            )
+        elif any(o.ability == ability for w in self.workers for o in w.orders):
+            return sum([o.ability == ability for w in self.workers for o in w.orders])
+        return 0
