@@ -1,10 +1,7 @@
 from typing import Literal
-from bot.helpers import Helpers
 from sc2.bot_ai import BotAI
-from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
-from sc2.ids.upgrade_id import UpgradeId
 
 
 class TankMicroMixin(BotAI):
@@ -13,11 +10,15 @@ class TankMicroMixin(BotAI):
     async def tank_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         tanks = self.units(UnitTypeId.SIEGETANK)
         if mode == "defend":
-            for st in tanks.idle:
-                st(AbilityId.SIEGEMODE_SIEGEMODE)
+            for tank in tanks.idle:
+                tank(AbilityId.SIEGEMODE_SIEGEMODE)
         else:
-            for st in tanks:
-                if not self.enemy_units.visible:
-                    st(AbilityId.UNSIEGE_UNSIEGE)
+            for tank in tanks.idle:
+                if (
+                    len(self.enemy_units) > 0
+                    and self.enemy_units.closest_distance_to(tank.position) < 14
+                ):
+                    tank(AbilityId.SIEGEMODE_SIEGEMODE)
                 else:
-                    st(AbilityId.SIEGEMODE_SIEGEMODE)
+                    print("unseiging tank")
+                    tank(AbilityId.UNSIEGE_UNSIEGE)

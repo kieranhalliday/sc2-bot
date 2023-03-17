@@ -4,11 +4,11 @@ from bot.macro.macro_helpers_mixin import MacroHelpersMixin
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
+from sc2.unit import Unit
 
 # TODO
-# Wall other bases that aren't the main
-# create repair function
 # build add on when no space (atm if no space add on won't be built)
+# Expand more carefully
 
 
 ## Bot to handle macro behaviors
@@ -47,7 +47,7 @@ class MacroBotMixin(MacroHelpersMixin):
         # Build depots
         if (
             self.can_afford(UnitTypeId.SUPPLYDEPOT)
-            and self.supply_left < 5 * len(self.townhalls)
+            and self.supply_left < 5 * len(self.townhalls.ready)
             and self.already_pending(UnitTypeId.SUPPLYDEPOT)
             < min(len(self.townhalls), 4)
             and self.supply_cap < 200
@@ -68,13 +68,38 @@ class MacroBotMixin(MacroHelpersMixin):
                         if minerals_left > max_minerals_left:
                             latest_cc = cc
 
-                    if latest_cc is not None:
-                        await self.build_structure(
-                            UnitTypeId.SUPPLYDEPOT,
-                            latest_cc.position.towards(
-                                self.game_info.map_center, 4
-                            ).random_on_distance(6),
+                if latest_cc is None:
+                    latest_cc == random.choice(self.townhalls)
+
+                if latest_cc is not None:
+                    vg: Unit = random.choice(
+                        self.vespene_geyser.closer_than(10, latest_cc)
+                    )
+                    position = await self.find_placement(
+                        UnitTypeId.SUPPLYDEPOT,
+                        vg.position.towards(
+                            latest_cc,
+                            2
+                            * (
+                                1
+                                + len(
+                                    self.structures.filter(
+                                        lambda structure: structure.type_id
+                                        == UnitTypeId.SUPPLYDEPOT
+                                        or structure.type_id
+                                        == UnitTypeId.SUPPLYDEPOTLOWERED
+                                    ).closer_than(10, vg.position)
+                                )
+                            ),
+                        ),
+                    )
+
+                    if position is None:
+                        position = self.find_placement(
+                            UnitTypeId.SUPPLYDEPOT, latest_cc.position
                         )
+
+                    await self.build_structure(UnitTypeId.SUPPLYDEPOT, position)
 
         await self.handle_depot_height()
 
@@ -172,18 +197,6 @@ class MacroBotMixin(MacroHelpersMixin):
                 self.enemy_start_locations[0]
             ).position.towards(center, 5)
 
-        for rax in self.structures(UnitTypeId.BARRACKS).ready:
-            if rax.is_idle:
-                rax.train(UnitTypeId.MARINE, can_afford_check=True)
-                if rax.has_reactor:
-                    rax.train(UnitTypeId.MARINE, can_afford_check=True)
-            rax(AbilityId.RALLY_UNITS, rally_point)
-
-        for factory in self.structures(UnitTypeId.FACTORY).ready:
-            if factory.is_idle:
-                factory.train(UnitTypeId.SIEGETANK, can_afford_check=True)
-            factory(AbilityId.RALLY_UNITS, rally_point)
-
         for starport in self.structures(UnitTypeId.STARPORT).ready:
             if starport.is_idle:
                 starport.train(UnitTypeId.VIKINGFIGHTER, can_afford_check=True)
@@ -191,12 +204,21 @@ class MacroBotMixin(MacroHelpersMixin):
                     starport.train(UnitTypeId.VIKINGFIGHTER, can_afford_check=True)
             starport(AbilityId.RALLY_UNITS, rally_point)
 
+        for factory in self.structures(UnitTypeId.FACTORY).ready:
+            if factory.is_idle:
+                factory.train(UnitTypeId.SIEGETANK, can_afford_check=True)
+            factory(AbilityId.RALLY_UNITS, rally_point)
+
+        for rax in self.structures(UnitTypeId.BARRACKS).ready:
+            if rax.is_idle:
+                rax.train(UnitTypeId.MARINE, can_afford_check=True)
+                if rax.has_reactor:
+                    rax.train(UnitTypeId.MARINE, can_afford_check=True)
+            rax(AbilityId.RALLY_UNITS, rally_point)
+
     async def build_workers(self):
         for cc in self.townhalls.ready:
-            if (
-                len(self.structures(UnitTypeId.ORBITALCOMMAND)) < 3
-                and len(self.structures(UnitTypeId.BARRACKS)) > 0
-            ):
+            if len(self.structures(UnitTypeId.ORBITALCOMMAND)) < 3:
                 cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
             elif len(self.structures(UnitTypeId.ENGINEERINGBAY)) > 0:
                 cc(AbilityId.UPGRADETOPLANETARYFORTRESS_PLANETARYFORTRESS)
@@ -229,11 +251,9 @@ class MacroBotMixin(MacroHelpersMixin):
                     cc.position.towards(self.game_info.map_center, 6),
                 )
 
-            if (
-                not self.structures(UnitTypeId.MISSILETURRET).closer_than(6, cc).ready
-                and len(self.structures(UnitTypeId.ENGINEERINGBAY)) > 0
-                and not self.already_pending(UnitTypeId.MISSILETURRET)
-            ):
+            if not self.structures(UnitTypeId.MISSILETURRET).closer_than(
+                10, cc
+            ).ready and not self.already_pending(UnitTypeId.MISSILETURRET):
                 await self.build_structure(
                     UnitTypeId.MISSILETURRET,
                     cc.position.towards(
@@ -249,6 +269,34 @@ class MacroBotMixin(MacroHelpersMixin):
             if worker is None:
                 break
             worker.smart(structure)
+
+    async def repair(self):
+        priority_repair_buildings = [
+            UnitTypeId.PLANETARYFORTRESS,
+            UnitTypeId.BUNKER,
+            UnitTypeId.MISSILETURRET,
+        ]
+
+        for unit in self.all_own_units:
+            available_workers = self.workers.filter(
+                lambda worker: not worker.is_repairing
+            )
+
+            if (
+                unit.type_id in priority_repair_buildings
+                and unit.health_percentage < 99
+            ):
+                # Always pull lots of workers for priority buildings
+                for worker in available_workers.closest_n_units(unit.position, 10):
+                    if worker is None:
+                        break
+                    worker.repair(unit)
+
+            elif unit.health_percentage < 50 and unit.is_mechanical:
+                worker = available_workers.closest_to(unit.position)
+                if worker is None or worker.distance_to(unit) > 50:
+                    break
+                worker.repair(unit)
 
     async def handle_depot_height(self):
         # Raise depos when enemies are nearby
@@ -327,6 +375,13 @@ class MacroBotMixin(MacroHelpersMixin):
                 tech_lab.research(UpgradeId.STIMPACK, can_afford_check=True)
             elif not self.already_pending(AbilityId.RESEARCH_COMBATSHIELD):
                 tech_lab(AbilityId.RESEARCH_COMBATSHIELD, can_afford_check=True)
+            elif not self.already_pending(AbilityId.RESEARCH_CONCUSSIVESHELLS):
+                tech_lab(AbilityId.RESEARCH_CONCUSSIVESHELLS, can_afford_check=True)
+
+        if self.structures(UnitTypeId.FACTORYTECHLAB).idle:
+            tech_lab = self.structures(UnitTypeId.FACTORYTECHLAB).idle.first
+            if not self.already_pending_upgrade(UpgradeId.SMARTSERVOS):
+                tech_lab.research(UpgradeId.SMARTSERVOS, can_afford_check=True)
 
     async def on_step_macro(self, iteration: int):
         """
@@ -346,5 +401,6 @@ class MacroBotMixin(MacroHelpersMixin):
         await self.build_defenses()
         await self.build_production()
         await self.finish_buildings_under_construction()
+        await self.repair()
         await self.build_add_ons()
         await self.build_units()
