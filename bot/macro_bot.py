@@ -10,6 +10,8 @@ from sc2.unit import Unit
 # Add speed mining functionality
 # Expand more carefully
 # Cancel buildings under attack
+# You can save data to a ./data directory that will be persisted between games.
+# That is how you do machine learning on the ladder
 
 
 ## Bot to handle macro behaviors
