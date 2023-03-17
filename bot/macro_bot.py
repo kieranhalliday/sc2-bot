@@ -7,8 +7,9 @@ from sc2.ids.upgrade_id import UpgradeId
 from sc2.unit import Unit
 
 # TODO
-# build add on when no space (atm if no space add on won't be built)
+# Add speed mining functionality
 # Expand more carefully
+# Cancel buildings under attack
 
 
 ## Bot to handle macro behaviors
@@ -19,15 +20,47 @@ class MacroBotMixin(MacroHelpersMixin):
     build_type = "BIO"
 
     async def build_add_ons(self):
-        for b in self.structures(UnitTypeId.BARRACKS).idle:
-            if len(self.structures(UnitTypeId.BARRACKSTECHLAB)) == 0:
-                b(AbilityId.BUILD_TECHLAB)
+        for b in self.structures(UnitTypeId.BARRACKS):
+            if not b.has_add_on and not await self.can_place_single(
+                UnitTypeId.SUPPLYDEPOT, b.position.offset((2.5, -0.5))
+            ):
+                b(AbilityId.LIFT_BARRACKS)
             else:
-                b(AbilityId.BUILD_REACTOR)
+                if len(self.structures(UnitTypeId.BARRACKSTECHLAB)) == 0:
+                    b(AbilityId.BUILD_TECHLAB, queue=True)
+                else:
+                    b(AbilityId.BUILD_REACTOR, queue=True)
+
         for f in self.structures(UnitTypeId.FACTORY).idle:
-            f(AbilityId.BUILD_TECHLAB)
+            if not f.has_add_on and not await self.can_place_single(
+                UnitTypeId.SUPPLYDEPOT, f.position.offset((2.5, -0.5))
+            ):
+                f(AbilityId.LIFT_FACTORY)
+            else:
+                f(AbilityId.BUILD_TECHLAB, queue=True)
+
         for s in self.structures(UnitTypeId.STARPORT).idle:
-            s(AbilityId.BUILD_REACTOR)
+            if not s.has_add_on and not await self.can_place_single(
+                UnitTypeId.SUPPLYDEPOT, s.position.offset((2.5, -0.5))
+            ):
+                s(AbilityId.LIFT_STARPORT)
+            else:
+                s(AbilityId.BUILD_REACTOR, queue=True)
+
+        # Find new positions for buildings without add on space
+        for structure in (
+            self.structures(UnitTypeId.BARRACKSFLYING).idle
+            + self.structures(UnitTypeId.FACTORYFLYING).idle
+            + self.structures(UnitTypeId.STARPORTFLYING).idle
+        ):
+            new_position = await self.find_placement(
+                UnitTypeId.BARRACKS, structure.position, addon_place=True
+            )
+            if new_position is not None:
+                structure(
+                    AbilityId.LAND,
+                    new_position,
+                )
 
     async def build_depots(self):
         depot_placement_positions = self.main_base_ramp.corner_depots
@@ -95,7 +128,7 @@ class MacroBotMixin(MacroHelpersMixin):
                     )
 
                     if position is None:
-                        position = self.find_placement(
+                        position = await self.find_placement(
                             UnitTypeId.SUPPLYDEPOT, latest_cc.position
                         )
 
@@ -108,20 +141,22 @@ class MacroBotMixin(MacroHelpersMixin):
         # Rax, factories and starports per base.
         # Index of outer array is base count
         production_buidings_per_base = [
-            (UnitTypeId.BARRACKS, [1, 3, 5, 8]),
-            (UnitTypeId.FACTORY, [1, 1, 2, 2]),
-            (UnitTypeId.STARPORT, [1, 1, 1, 3]),
+            ([UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING], [1, 3, 5, 8]),
+            ([UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING], [1, 1, 2, 2]),
+            ([UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING], [1, 1, 1, 3]),
         ]
 
         # Max of 4 ccs of production supported
         ccs = min(len(self.townhalls.ready), 4)
 
         for production_building in production_buidings_per_base:
-            building_id = production_building[0]
+            building_id = production_building[0][0]
+            flying_building_id = production_building[0][1]
             building_count = production_building[1]
-
             if (
-                len(self.structures(building_id)) + self.already_pending(building_id)
+                len(self.structures(building_id))
+                + self.already_pending(building_id)
+                + len(self.structures(flying_building_id))
                 < building_count[ccs - 1]
             ):
                 if (
@@ -284,7 +319,7 @@ class MacroBotMixin(MacroHelpersMixin):
 
             if (
                 unit.type_id in priority_repair_buildings
-                and unit.health_percentage < 99
+                and unit.health_percentage < 100
             ):
                 # Always pull lots of workers for priority buildings
                 for worker in available_workers.closest_n_units(unit.position, 10):
@@ -294,7 +329,7 @@ class MacroBotMixin(MacroHelpersMixin):
 
             elif unit.health_percentage < 50 and unit.is_mechanical:
                 worker = available_workers.closest_to(unit.position)
-                if worker is None or worker.distance_to(unit) > 50:
+                if worker is None or worker.distance_to(unit) > 20:
                     break
                 worker.repair(unit)
 
@@ -395,6 +430,8 @@ class MacroBotMixin(MacroHelpersMixin):
         await self.distribute_workers()
         await self.build_workers()
         await self.build_depots()
+        await self.build_add_ons()
+        await self.build_units()
         await self.build_refineries()
         await self.handle_upgrades()
         await self.expand()
@@ -402,5 +439,3 @@ class MacroBotMixin(MacroHelpersMixin):
         await self.build_production()
         await self.finish_buildings_under_construction()
         await self.repair()
-        await self.build_add_ons()
-        await self.build_units()

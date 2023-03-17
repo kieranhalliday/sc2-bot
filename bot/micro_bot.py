@@ -4,13 +4,16 @@ from typing import Literal
 from bot.micro.marine_micro import MarineMicroMixin
 from bot.micro.reaper_micro import ReaperMicroMixin
 from bot.micro.tank_micro import TankMicroMixin
+from bot.micro.viking_micro import VikingMicroMixin
 from sc2.ids.unit_typeid import UnitTypeId
 
 
 ## Bot to handle micro behaviors
 ## Desgined to be combined with the MacroBot
 ## and extended in the main bot class
-class MicroBotMixin(ReaperMicroMixin, MarineMicroMixin, TankMicroMixin):
+class MicroBotMixin(
+    ReaperMicroMixin, MarineMicroMixin, TankMicroMixin, VikingMicroMixin
+):
     NAME: str = "MicroBot"
     MODE: Literal["attack", "defend"] = "defend"
 
@@ -38,4 +41,5 @@ class MicroBotMixin(ReaperMicroMixin, MarineMicroMixin, TankMicroMixin):
         await self.reaper_micro(iteration, self.MODE)
         await self.marine_micro(iteration, self.MODE)
         await self.tank_micro(iteration, self.MODE)
+        await self.viking_micro(iteration, self.MODE)
         await self.fight()
