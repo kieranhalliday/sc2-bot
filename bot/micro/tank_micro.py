@@ -6,7 +6,7 @@ from sc2.units import Units
 
 
 class TankMicroMixin(BotAI):
-    NAME: str = "TankMicro"
+    MIXIN_NAME: str = "TankMicro"
 
     async def tank_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         tanks: Units = self.units(UnitTypeId.SIEGETANK) + self.units(

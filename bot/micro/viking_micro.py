@@ -6,23 +6,19 @@ from sc2.units import Units
 
 
 class VikingMicroMixin(BotAI):
-    NAME: str = "VikingMicro"
+    MIXIN_NAME: str = "VikingMicro"
 
     async def viking_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         vikings: Units = self.units(UnitTypeId.VIKINGFIGHTER) + self.units(
             UnitTypeId.VIKINGASSAULT
         )
 
-        if mode == "defend":
-            for v in vikings.idle:
-                v.patrol(self.townhalls.first)
-        else:
-            for v in vikings.idle:
-                flying_units = self.enemy_units.filter(lambda unit: unit.is_flying)
-                if (
-                    len(flying_units) > 0
-                    and flying_units.closest_distance_to(v.position) < 15
-                ):
-                    v(AbilityId.MORPH_VIKINGFIGHTERMODE)
-                else:
-                    v(AbilityId.MORPH_VIKINGASSAULTMODE)
+        for v in vikings.idle:
+            flying_units = self.enemy_units.filter(lambda unit: unit.is_flying)
+            if (
+                len(flying_units) > 0
+                and flying_units.closest_distance_to(v.position) < 15
+            ):
+                v(AbilityId.MORPH_VIKINGFIGHTERMODE)
+            else:
+                v(AbilityId.MORPH_VIKINGASSAULTMODE)

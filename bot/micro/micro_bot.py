@@ -14,7 +14,7 @@ from sc2.ids.unit_typeid import UnitTypeId
 class MicroBotMixin(
     ReaperMicroMixin, MarineMicroMixin, TankMicroMixin, VikingMicroMixin
 ):
-    NAME: str = "MicroBot"
+    MIXIN_NAME: str = "MicroBot"
     MODE: Literal["attack", "defend"] = "defend"
 
     async def fight(self):

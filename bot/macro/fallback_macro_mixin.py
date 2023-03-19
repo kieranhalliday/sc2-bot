@@ -1,24 +1,19 @@
 import random
-from bot.macro.macro_helpers_mixin import MacroHelpersMixin
+from bot.macro.basic_macro_mixin import BasicMacroMixin
 
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.unit import Unit
 
-# TODO
-# Add speed mining functionality
-# Expand more carefully
-# Cancel buildings under attack
 # You can save data to a ./data directory that will be persisted between games.
 # That is how you do machine learning on the ladder
 
 
-## Bot to handle macro behaviors
-## Desgined to be combined with the MicroBot
-## and extended in the main bot class
-class MacroBotMixin(MacroHelpersMixin):
-    NAME: str = "MacroBot"
+## Bot to handle fallback macro behaviors
+## When a build order ends, this will be executed
+class FallbackMacroMixin(BasicMacroMixin):
+    MIXIN_NAME: str = "FallbackMacro"
     build_type = "BIO"
 
     async def build_add_ons(self):
@@ -103,7 +98,7 @@ class MacroBotMixin(MacroHelpersMixin):
                         if minerals_left > max_minerals_left:
                             latest_cc = cc
 
-                if latest_cc is None:
+                if latest_cc is None and self.townhalls:
                     latest_cc == random.choice(self.townhalls)
 
                 if latest_cc is not None:
@@ -136,20 +131,18 @@ class MacroBotMixin(MacroHelpersMixin):
 
                     await self.build_structure(UnitTypeId.SUPPLYDEPOT, position)
 
-        await self.handle_depot_height()
-
     async def build_production(self):
         # 1-1-1 -> 3-1-1 -> 5-1-1 -> 5-2-1 -> 8-2-1
         # Rax, factories and starports per base.
         # Index of outer array is base count
         production_buidings_per_base = [
-            ([UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING], [1, 3, 5, 8]),
-            ([UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING], [1, 1, 2, 2]),
-            ([UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING], [1, 1, 1, 3]),
+            ([UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING], [1, 3, 5, 8, 11]),
+            ([UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING], [1, 1, 2, 2, 4]),
+            ([UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING], [1, 1, 1, 3, 4]),
         ]
 
         # Max of 4 ccs of production supported
-        ccs = min(len(self.townhalls.ready), 4)
+        ccs = min(len(self.townhalls.ready), 5)
 
         for production_building in production_buidings_per_base:
             building_id = production_building[0][0]
@@ -253,18 +246,6 @@ class MacroBotMixin(MacroHelpersMixin):
                     rax.train(UnitTypeId.MARINE, can_afford_check=True)
             rax(AbilityId.RALLY_UNITS, rally_point)
 
-    async def build_workers(self):
-        for cc in self.townhalls.ready:
-            if len(self.structures(UnitTypeId.ORBITALCOMMAND)) < 3:
-                cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
-            elif len(self.structures(UnitTypeId.ENGINEERINGBAY)) > 0:
-                cc(AbilityId.UPGRADETOPLANETARYFORTRESS_PLANETARYFORTRESS)
-            if (
-                self.units(UnitTypeId.SCV).amount < self.townhalls.amount * 22
-                and cc.is_idle
-            ):
-                cc.train(UnitTypeId.SCV)
-
     async def expand(self):
         # Expand when all CC's have at least all minerals and one gas saturated
         if (
@@ -288,9 +269,11 @@ class MacroBotMixin(MacroHelpersMixin):
                     cc.position.towards(self.game_info.map_center, 6),
                 )
 
-            if not self.structures(UnitTypeId.MISSILETURRET).closer_than(
-                10, cc
-            ).ready and not self.already_pending(UnitTypeId.MISSILETURRET):
+            if (
+                not self.structures(UnitTypeId.MISSILETURRET).closer_than(10, cc)
+                and not self.already_pending(UnitTypeId.MISSILETURRET)
+                and self.mineral_field.closer_than(10, cc)
+            ):
                 await self.build_structure(
                     UnitTypeId.MISSILETURRET,
                     cc.position.towards(
@@ -298,63 +281,12 @@ class MacroBotMixin(MacroHelpersMixin):
                     ),
                 )
 
-    async def finish_buildings_under_construction(self):
-        structures_to_finish = self.structures_without_construction_SCVs()
-
-        for structure in structures_to_finish:
-            worker = self.select_build_worker(structure.position)
-            if worker is None:
-                break
-            worker.smart(structure)
-
-    async def repair(self):
-        priority_repair_buildings = [
-            UnitTypeId.PLANETARYFORTRESS,
-            UnitTypeId.BUNKER,
-            UnitTypeId.MISSILETURRET,
-        ]
-
-        for unit in self.all_own_units:
-            available_workers = self.workers.filter(
-                lambda worker: not worker.is_repairing
-            )
-
-            if (
-                unit.type_id in priority_repair_buildings
-                and unit.health_percentage < 100
-            ):
-                # Always pull lots of workers for priority buildings
-                for worker in available_workers.closest_n_units(unit.position, 10):
-                    if worker is None:
-                        break
-                    worker.repair(unit)
-
-            elif unit.health_percentage < 50 and unit.is_mechanical:
-                worker = available_workers.closest_to(unit.position)
-                if worker is None or worker.distance_to(unit) > 20:
-                    break
-                worker.repair(unit)
-
-    async def handle_depot_height(self):
-        # Raise depos when enemies are nearby
-        for depo in self.structures(UnitTypeId.SUPPLYDEPOTLOWERED).ready:
-            for unit in self.enemy_units:
-                if unit.position.to2.distance_to(depo.position.to2) < 10:
-                    depo(AbilityId.MORPH_SUPPLYDEPOT_RAISE)
-
-        # Lower depos when no enemies are nearby
-        for depo in self.structures(UnitTypeId.SUPPLYDEPOT).ready:
-            for unit in self.enemy_units:
-                if unit.position.to2.distance_to(depo.position.to2) < 15:
-                    break
-            else:
-                depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
-
     async def manage_cc_actions(self):
         for cc in self.townhalls:
             mfs = self.mineral_field.closer_than(10, cc)
             if mfs:
                 mf = max(mfs, key=lambda x: x.mineral_contents)
+                print("Rallying SCVS to minerals")
                 cc(AbilityId.RALLY_WORKERS, mf)
                 cc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf, can_afford_check=True)
 
@@ -420,17 +352,16 @@ class MacroBotMixin(MacroHelpersMixin):
             if not self.already_pending_upgrade(UpgradeId.SMARTSERVOS):
                 tech_lab.research(UpgradeId.SMARTSERVOS, can_afford_check=True)
 
-    async def on_step_macro(self, iteration: int):
+    async def on_step_fallback_macro(self, iteration: int):
         """
         This code runs continually throughout the game
         Populate this function with whatever your bot should do!
         """
-        # Macro cycle
+        await super().on_step(iteration)
+
         if iteration % 25 == 0:
             await self.manage_cc_actions()
 
-        await self.distribute_workers()
-        await self.build_workers()
         await self.build_depots()
         await self.build_add_ons()
         await self.build_units()
@@ -439,5 +370,3 @@ class MacroBotMixin(MacroHelpersMixin):
         await self.expand()
         await self.build_defenses()
         await self.build_production()
-        await self.finish_buildings_under_construction()
-        await self.repair()

@@ -7,7 +7,7 @@ from ..helpers import Helpers
 
 
 class ReaperMicroMixin(BotAI):
-    NAME: str = "ReaperMicro"
+    MIXIN_NAME: str = "ReaperMicro"
 
     async def reaper_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         for r in self.units(UnitTypeId.REAPER):
