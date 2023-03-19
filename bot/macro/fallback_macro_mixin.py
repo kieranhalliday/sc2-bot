@@ -286,7 +286,6 @@ class FallbackMacroMixin(BasicMacroMixin):
             mfs = self.mineral_field.closer_than(10, cc)
             if mfs:
                 mf = max(mfs, key=lambda x: x.mineral_contents)
-                print("Rallying SCVS to minerals")
                 cc(AbilityId.RALLY_WORKERS, mf)
                 cc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf, can_afford_check=True)
 
@@ -353,15 +352,8 @@ class FallbackMacroMixin(BasicMacroMixin):
                 tech_lab.research(UpgradeId.SMARTSERVOS, can_afford_check=True)
 
     async def on_step_fallback_macro(self, iteration: int):
-        """
-        This code runs continually throughout the game
-        Populate this function with whatever your bot should do!
-        """
-        await super().on_step(iteration)
-
-        if iteration % 25 == 0:
-            await self.manage_cc_actions()
-
+        print("Fallback macro")
+        await self.manage_cc_actions()
         await self.build_depots()
         await self.build_add_ons()
         await self.build_units()
@@ -370,3 +362,5 @@ class FallbackMacroMixin(BasicMacroMixin):
         await self.expand()
         await self.build_defenses()
         await self.build_production()
+
+        await super().on_step(iteration)

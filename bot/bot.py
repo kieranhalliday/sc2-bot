@@ -8,7 +8,10 @@ from sc2.data import Result
 
 
 class CompetitiveBot(
-    FallbackMacroMixin, MicroBotMixin, ReactiveBotMixin, TvTStandardBuildOrderMixin
+    TvTStandardBuildOrderMixin,
+    FallbackMacroMixin,
+    MicroBotMixin,
+    ReactiveBotMixin,
 ):
     NAME: str = "ArchonBot"
     RACE: Race = Race.Terran
@@ -42,18 +45,21 @@ class CompetitiveBot(
             self.build_order_finished = True
 
         if self.build_order_finished or not self.chosen_build_order:
+            print("Using fallback macro")
             await self.on_step_fallback_macro(iteration)
         else:
-            # try:
-            self.build_order_finished = await self.chosen_build_order.on_step(
-                self, iteration
-            )
-            # except Exception as e:
-            #     # Something failed, end build order
-            #     print("Build order failed ", e)
-            #     self.build_order_finished = True
+            print("Executing build order")
+            try:
+                self.build_order_finished = await self.chosen_build_order.on_step(
+                    self, iteration
+                )
+                print(self.build_order_finished)
+            except Exception as e:
+                # Something failed, end build order
+                print("Build order failed ", e)
+                self.build_order_finished = True
 
-        # await self.on_step_micro(iteration)
+        await self.on_step_micro(iteration)
 
     async def on_end(self, result: Result):
         """
