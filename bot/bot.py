@@ -53,7 +53,7 @@ class CompetitiveBot(
             #     print("Build order failed ", e)
             #     self.build_order_finished = True
 
-        await self.on_step_micro(iteration)
+        # await self.on_step_micro(iteration)
 
     async def on_end(self, result: Result):
         """

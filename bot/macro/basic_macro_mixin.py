@@ -218,7 +218,7 @@ class BasicMacroMixin(BotAI):
                 and worker.tag not in excludeTags
             ):
                 return worker
-        return self.workers.random if force else None
+        return self.workers.closest_to(pos) if force else None
 
     async def on_step(self, iteration: int):
         await self.distribute_workers()
