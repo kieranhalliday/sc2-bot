@@ -2,6 +2,7 @@ import random
 from typing import Literal
 
 from bot.micro.marine_micro import MarineMicroMixin
+from bot.micro.raven_micro import RavenMicroMixin
 from bot.micro.reaper_micro import ReaperMicroMixin
 from bot.micro.tank_micro import TankMicroMixin
 from bot.micro.viking_micro import VikingMicroMixin
@@ -12,7 +13,11 @@ from sc2.ids.unit_typeid import UnitTypeId
 ## Desgined to be combined with the MacroBot
 ## and extended in the main bot class
 class MicroBotMixin(
-    ReaperMicroMixin, MarineMicroMixin, TankMicroMixin, VikingMicroMixin
+    ReaperMicroMixin,
+    MarineMicroMixin,
+    TankMicroMixin,
+    VikingMicroMixin,
+    RavenMicroMixin,
 ):
     MIXIN_NAME: str = "MicroBot"
     MODE: Literal["attack", "defend"] = "defend"
@@ -34,10 +39,7 @@ class MicroBotMixin(
             self.MODE = "defend"
 
     async def on_step_micro(self, iteration: int):
-        """
-        This code runs continually throughout the game
-        Populate this function with whatever your bot should do!
-        """
+        await self.raven_micro(iteration, self.MODE)
         await self.reaper_micro(iteration, self.MODE)
         await self.marine_micro(iteration, self.MODE)
         await self.tank_micro(iteration, self.MODE)

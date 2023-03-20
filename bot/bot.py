@@ -45,15 +45,12 @@ class CompetitiveBot(
             self.build_order_finished = True
 
         if self.build_order_finished or not self.chosen_build_order:
-            print("Using fallback macro")
             await self.on_step_fallback_macro(iteration)
         else:
-            print("Executing build order")
             try:
                 self.build_order_finished = await self.chosen_build_order.on_step(
                     self, iteration
                 )
-                print(self.build_order_finished)
             except Exception as e:
                 # Something failed, end build order
                 print("Build order failed ", e)
@@ -67,4 +64,8 @@ class CompetitiveBot(
         Do things here after the game ends
         """
         print("Game ended.")
+        f = open("data/results.txt", "w")
+        f.write(f"Build order: {self.chosen_build_order.MIXIN_NAME}. Result: {result}.")
+        f.close()
+
         print(result)

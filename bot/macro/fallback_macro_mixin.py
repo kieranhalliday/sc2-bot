@@ -37,8 +37,12 @@ class FallbackMacroMixin(BasicMacroMixin):
                 f(AbilityId.BUILD_TECHLAB, queue=True)
 
         for s in self.structures(UnitTypeId.STARPORT).idle:
-            if not s.has_add_on and not await self.can_place_single(
-                UnitTypeId.SUPPLYDEPOT, s.position.offset((2.5, -0.5))
+            if (
+                not s.has_add_on
+                and not await self.can_place_single(
+                    UnitTypeId.SUPPLYDEPOT, s.position.offset((2.5, -0.5))
+                )
+                or s.has_techlab
             ):
                 s(AbilityId.LIFT_STARPORT)
             else:
@@ -251,8 +255,7 @@ class FallbackMacroMixin(BasicMacroMixin):
         if (
             self.can_afford(UnitTypeId.COMMANDCENTER)
             and self.units(UnitTypeId.SCV).amount >= self.townhalls.amount * 18
-            and self.already_pending(UnitTypeId.COMMANDCENTER)
-            <= len(self.townhalls.ready)
+            and not self.already_pending(UnitTypeId.COMMANDCENTER)
             and await self.get_next_expansion() is not None
         ):
             await self.expand_now()
@@ -352,7 +355,6 @@ class FallbackMacroMixin(BasicMacroMixin):
                 tech_lab.research(UpgradeId.SMARTSERVOS, can_afford_check=True)
 
     async def on_step_fallback_macro(self, iteration: int):
-        print("Fallback macro")
         await self.manage_cc_actions()
         await self.build_depots()
         await self.build_add_ons()

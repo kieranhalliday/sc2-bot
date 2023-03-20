@@ -57,10 +57,8 @@ class TvTStandardBuildOrderMixin(BasicMacroMixin):
     ]
 
     async def on_unit_created(self, unit: Unit):
-        print(f"{unit.name} created")
         if not self.FIRST_SCV_TAG and unit.type_id == UnitTypeId.SCV:
             self.FIRST_SCV_TAG = unit.tag
-            print(f"First SCV Tag {self.FIRST_SCV_TAG}")
 
     async def on_building_construction_started(self, unit: Unit):
         print(f"{unit.name} started building")
@@ -190,15 +188,13 @@ class TvTStandardBuildOrderMixin(BasicMacroMixin):
                     self.WALL_DONE = True
 
                 if (
-                    self.WALL_DONE
-                    and self.structures(UnitTypeId.FACTORY).amount == 0
+                    unit_type_id == UnitTypeId.FACTORY
                     and self.already_pending(UnitTypeId.FACTORY) == 0
                 ):
                     await self.build_structure(UnitTypeId.FACTORY)
 
                 if (
-                    self.townhalls.amount == 1
-                    and self.structures(UnitTypeId.FACTORY).amount == 1
+                    unit_type_id == UnitTypeId.COMMANDCENTER
                     and self.already_pending(UnitTypeId.COMMANDCENTER) == 0
                 ):
                     await self.expand_now()
@@ -206,14 +202,13 @@ class TvTStandardBuildOrderMixin(BasicMacroMixin):
                 if (
                     self.townhalls.amount == 2
                     and self.structures(UnitTypeId.FACTORY).amount == 1
-                    and self.already_pending(UnitTypeId.COMMANDCENTER) == 1
+                    and unit_type_id == UnitTypeId.SUPPLYDEPOT
                     and not self.already_pending(UnitTypeId.SUPPLYDEPOT)
                 ):
                     await self.build_structure(UnitTypeId.SUPPLYDEPOT)
 
                 if (
-                    self.townhalls.amount == 2
-                    and self.structures(UnitTypeId.STARPORT).amount == 0
+                    unit_type_id == UnitTypeId.STARPORT
                     and self.already_pending(UnitTypeId.STARPORT) == 0
                 ):
                     await self.build_structure(UnitTypeId.STARPORT)
@@ -317,10 +312,15 @@ class TvTStandardBuildOrderMixin(BasicMacroMixin):
         await super().on_step(iteration)
 
         if len(self.build_order) == 0:
+            f = open("data/TvtStandard.txt", "w")
+            f.write(
+                f"Build order {self.MIXIN_NAME} ended in {self.time_formatted} with supply {self.supply_used}"
+            )
+            f.close()
+
             print(
                 f"Build order {self.MIXIN_NAME} ended in {self.time_formatted} with supply {self.supply_used}"
             )
-            # Last thing to do, switch starport onto reactor
             return True
         else:
             return False
