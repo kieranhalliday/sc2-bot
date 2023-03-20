@@ -48,21 +48,6 @@ class FallbackMacroMixin(BasicMacroMixin):
             else:
                 s(AbilityId.BUILD_REACTOR, queue=True)
 
-        # Find new positions for buildings without add on space
-        for structure in (
-            self.structures(UnitTypeId.BARRACKSFLYING).idle
-            + self.structures(UnitTypeId.FACTORYFLYING).idle
-            + self.structures(UnitTypeId.STARPORTFLYING).idle
-        ):
-            new_position = await self.find_placement(
-                UnitTypeId.BARRACKS, structure.position, addon_place=True
-            )
-            if new_position is not None:
-                structure(
-                    AbilityId.LAND,
-                    new_position,
-                )
-
     async def build_depots(self):
         depot_placement_positions = self.main_base_ramp.corner_depots
 

@@ -5,6 +5,7 @@ from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
+from sc2.unit import Unit
 
 # TODO
 # Add speed mining functionality
@@ -13,6 +14,16 @@ from sc2.position import Point2
 # Holds the functions that all build order macro bot can use
 class BasicMacroMixin(BotAI):
     MIXIN_NAME: str = "BasicMacro"
+
+    def swap_add_ons(self, first_structure: Unit, second_structure: Unit):
+        first_structure_pos = first_structure.position
+        second_structure_pos = second_structure.position
+
+        first_structure(AbilityId.LIFT)
+        second_structure(AbilityId.LIFT)
+
+        first_structure(AbilityId.LAND, second_structure_pos)
+        second_structure(AbilityId.LAND, first_structure_pos)
 
     def already_pending(self, unit_type):
         ability = self.game_data.units[unit_type.value].creation_ability
@@ -209,7 +220,7 @@ class BasicMacroMixin(BotAI):
                 depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
 
     def select_build_worker(self, pos, force=False, excludeTags=[]):
-        for worker in self.workers:
+        for worker in sorted(self.workers, key=lambda unit: unit.distance_to(pos)):
             if (
                 not worker.orders
                 or len(worker.orders) == 1
@@ -220,8 +231,25 @@ class BasicMacroMixin(BotAI):
                 return worker
         return self.workers.closest_to(pos) if force else None
 
+    async def land_flying_buildings_with_add_on_space(self):
+        # Find new positions for buildings without add on space
+        for structure in (
+            self.structures(UnitTypeId.BARRACKSFLYING).idle
+            + self.structures(UnitTypeId.FACTORYFLYING).idle
+            + self.structures(UnitTypeId.STARPORTFLYING).idle
+        ):
+            new_position = await self.find_placement(
+                UnitTypeId.BARRACKS, structure.position, addon_place=True
+            )
+            if new_position is not None:
+                structure(
+                    AbilityId.LAND,
+                    new_position,
+                )
+
     async def on_step(self, iteration: int):
         await self.distribute_workers()
         await self.build_workers()
         await self.handle_depot_height()
         await self.finish_buildings_under_construction()
+        await self.land_flying_buildings_with_add_on_space()

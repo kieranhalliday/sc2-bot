@@ -9,8 +9,8 @@ from sc2.unit import Unit
 # Scout with second scv
 # Saturate gas until factory
 # Pull out of gas
-class TvTStandardBuildOrderMixin(BasicMacroMixin):
-    MIXIN_NAME: str = "TvTStandard"
+class TvPStandardBuildOrderMixin(BasicMacroMixin):
+    MIXIN_NAME: str = "TvPStandard"
     FIRST_SCV_TAG = None
     WALL_DONE = False
     LATEST_CC = None
