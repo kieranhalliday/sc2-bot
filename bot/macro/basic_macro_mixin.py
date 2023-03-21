@@ -1,5 +1,5 @@
 import random
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
@@ -13,8 +13,6 @@ from sc2.unit import Unit
 
 # Holds the functions that all build order macro bot can use
 class BasicMacroMixin(BotAI):
-    MIXIN_NAME: str = "BasicMacro"
-
     def swap_add_ons(self, first_structure: Unit, second_structure: Unit):
         first_structure_pos = first_structure.position
         second_structure_pos = second_structure.position
@@ -24,35 +22,6 @@ class BasicMacroMixin(BotAI):
 
         first_structure(AbilityId.LAND, second_structure_pos)
         second_structure(AbilityId.LAND, first_structure_pos)
-
-    def already_pending(self, unit_type):
-        ability = self.game_data.units[unit_type.value].creation_ability
-        unitAttributes = self.game_data.units[unit_type.value].attributes
-
-        if 8 not in unitAttributes and any(
-            o.ability == ability for w in (self.units.not_structure) for o in w.orders
-        ):
-            return sum(
-                [
-                    o.ability == ability
-                    for w in (self.units - self.workers)
-                    for o in w.orders
-                ]
-            )
-        # following checks for unit production in a building queue, like queen, also checks if hatch is morphing to LAIR
-        elif any(
-            o.ability.id == ability.id for w in (self.units.structure) for o in w.orders
-        ):
-            return sum(
-                [
-                    o.ability.id == ability.id
-                    for w in (self.units.structure)
-                    for o in w.orders
-                ]
-            )
-        elif any(o.ability == ability for w in self.workers for o in w.orders):
-            return sum([o.ability == ability for w in self.workers for o in w.orders])
-        return 0
 
     async def build_structure(
         self, structure_id, position=None, can_afford_check=True, worker=None
@@ -64,9 +33,10 @@ class BasicMacroMixin(BotAI):
         ]
 
         if position == None:
-            if army_building:
-                near = self.main_base_ramp.barracks_correct_placement.to2
-            elif len(self.townhalls) > 0:
+            # if army_building:
+            #     near = self.main_base_ramp.barracks_correct_placement.to2
+            # elif:
+            if len(self.townhalls) > 0:
                 near = self.start_location.towards(
                     self.game_info.map_center, 3
                 ).random_on_distance(3)
@@ -93,17 +63,162 @@ class BasicMacroMixin(BotAI):
         if await self.can_place_single(structure_id, position):
             worker.build(structure_id, position, can_afford_check=can_afford_check)
 
+    async def build_refinery(self, force=False):
+        # The force flag allows specific build order to override generic refinery building behaviour
+        for cc in self.townhalls.filter(lambda x: x.build_progress > 0.6):
+            scvs_at_this_cc = []
+            for scv in self.units(UnitTypeId.SCV):
+                if scv.position.to2.distance_to(cc.position.to2) < 11:
+                    scvs_at_this_cc.append(scv)
+
+            if not force and len(scvs_at_this_cc) < (
+                16 + (len(self.structures(UnitTypeId.REFINERY).closer_than(11, cc)) * 3)
+            ):
+                # Don't build gas if minerals not saturated
+                # Don't build second gas until first gas saturated
+                return
+
+            for vg in self.vespene_geyser.closer_than(10, cc):
+                worker = self.select_build_worker(vg.position)
+                if worker is None:
+                    return
+
+                worker.build(UnitTypeId.REFINERY, vg)
+                # Build max 1 gas per call
+                return
+
     async def build_workers(self):
         for cc in self.townhalls.ready:
             if len(self.structures(UnitTypeId.ORBITALCOMMAND)) < 3:
                 cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
             elif len(self.structures(UnitTypeId.ENGINEERINGBAY)) > 0:
                 cc(AbilityId.UPGRADETOPLANETARYFORTRESS_PLANETARYFORTRESS)
-            if (
-                self.units(UnitTypeId.SCV).amount < self.townhalls.amount * 22
-                and cc.is_idle
+
+            if self.units(UnitTypeId.SCV).amount < self.townhalls.amount * 22 and (
+                cc.is_idle
+                or (
+                    self.already_pending(UnitTypeId.SCV, [cc]) < 2
+                    and self.unit_build_progress(cc, UnitTypeId.SCV) > 0.6
+                )
             ):
                 cc.train(UnitTypeId.SCV)
+
+    async def build_depots(self, worker=None, force=False):
+        depot_placement_positions = self.main_base_ramp.corner_depots
+
+        finished_depots = self.structures(UnitTypeId.SUPPLYDEPOT) | self.structures(
+            UnitTypeId.SUPPLYDEPOTLOWERED
+        )
+
+        # Filter finish depot locations
+        if finished_depots:
+            depot_placement_positions = {
+                d
+                for d in depot_placement_positions
+                if finished_depots.closest_distance_to(d) > 1
+            }
+
+        # Build depots
+        if self.can_afford(UnitTypeId.SUPPLYDEPOT) and (
+            self.supply_left < 5 * len(self.townhalls.ready)
+            and self.already_pending(UnitTypeId.SUPPLYDEPOT)
+            < min(len(self.townhalls), 4)
+            and self.supply_cap < 200
+            or force
+        ):
+            if len(depot_placement_positions) > 0:
+                target_depot_location = depot_placement_positions.pop()
+                await self.build_structure(
+                    UnitTypeId.SUPPLYDEPOT, target_depot_location, worker=worker
+                )
+            else:
+                max_minerals_left = 0
+
+                latest_cc = None
+                for cc in self.townhalls:
+                    mfs = self.mineral_field.closer_than(10, cc)
+                    if mfs:
+                        minerals_left = sum(map(lambda mf: mf.mineral_contents, mfs))
+                        if minerals_left > max_minerals_left:
+                            latest_cc = cc
+
+                if latest_cc is None and self.townhalls:
+                    latest_cc == random.choice(self.townhalls)
+
+                if latest_cc is not None:
+                    vg: Unit = random.choice(
+                        self.vespene_geyser.closer_than(10, latest_cc)
+                    )
+                    position = await self.find_placement(
+                        UnitTypeId.SUPPLYDEPOT,
+                        vg.position.towards(
+                            latest_cc,
+                            2
+                            * (
+                                1
+                                + len(
+                                    self.structures.filter(
+                                        lambda structure: structure.type_id
+                                        == UnitTypeId.SUPPLYDEPOT
+                                        or structure.type_id
+                                        == UnitTypeId.SUPPLYDEPOTLOWERED
+                                    ).closer_than(10, vg.position)
+                                )
+                            ),
+                        ),
+                    )
+
+                    if position is None:
+                        position = await self.find_placement(
+                            UnitTypeId.SUPPLYDEPOT, latest_cc.position
+                        )
+
+                    await self.build_structure(
+                        UnitTypeId.SUPPLYDEPOT, position, worker=worker
+                    )
+
+    def unit_build_progress(self, structure_building_unit, unit_type_id):
+        """Finds build progress of specific type of unit from specific building.
+        :param structure_building_unit structure building the unit:
+        :param unit_type_id unit type id being produced:
+        """
+        creationAbilityID = self.game_data.units[
+            unit_type_id.value
+        ].creation_ability.exact_id
+        for order in structure_building_unit.orders:
+            if order.ability.exact_id == creationAbilityID:
+                return order.progress
+        return 0
+
+    def already_pending(self, unit_type, structures=None):
+        ability = self.game_data.units[unit_type.value].creation_ability
+        unitAttributes = self.game_data.units[unit_type.value].attributes
+        structures_to_check = structures or self.structures
+
+        if 8 not in unitAttributes and any(
+            o.ability == ability for w in (self.units.not_structure) for o in w.orders
+        ):
+            return sum(
+                [
+                    o.ability == ability
+                    for w in (self.units - self.workers)
+                    for o in w.orders
+                ]
+            )
+        # following checks for unit production in a building queue, like queen, also checks if hatch is morphing to LAIR
+        elif any(
+            o.ability.id == ability.id for w in (structures_to_check) for o in w.orders
+        ):
+            return sum(
+                [
+                    o.ability.id == ability.id
+                    for w in (structures_to_check)
+                    for o in w.orders
+                ]
+            )
+        elif any(o.ability == ability for w in self.workers for o in w.orders):
+            return sum([o.ability == ability for w in self.workers for o in w.orders])
+        return 0
 
     async def find_placement(
         self,

@@ -7,8 +7,6 @@ from ..helpers import Helpers
 
 
 class ReaperMicroMixin(BotAI):
-    MIXIN_NAME: str = "ReaperMicro"
-
     async def reaper_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         for r in self.units(UnitTypeId.REAPER):
             # move to range 15 of closest unit if reaper is below 20 hp and not regenerating

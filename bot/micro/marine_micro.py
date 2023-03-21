@@ -8,8 +8,6 @@ from sc2.ids.upgrade_id import UpgradeId
 
 
 class MarineMicroMixin(BotAI):
-    MIXIN_NAME: str = "MarineMicro"
-
     async def marine_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         if mode == "defend":
             for bunker in self.structures(UnitTypeId.BUNKER):

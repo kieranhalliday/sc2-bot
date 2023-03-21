@@ -6,8 +6,6 @@ from sc2.units import Units
 
 
 class HellionMicroMixin(BotAI):
-    MIXIN_NAME: str = "HellionMicro"
-
     async def hellion_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         return
         # TODO: Implement

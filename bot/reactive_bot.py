@@ -6,8 +6,6 @@ from sc2.unit import Unit
 
 # This is where all the triggers and responses will live
 class ReactiveBotMixin(BotAI):
-    MIXIN_NAME: str = "ReactiveBot"
-
     async def on_unit_took_damage(self, unit: Unit, amount_damage_taken: float):
         if unit.is_structure and unit.health_percentage < 2:
             unit(AbilityId.CANCEL)

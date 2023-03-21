@@ -13,7 +13,6 @@ from sc2.unit import Unit
 ## Bot to handle fallback macro behaviors
 ## When a build order ends, this will be executed
 class FallbackMacroMixin(BasicMacroMixin):
-    MIXIN_NAME: str = "FallbackMacro"
     build_type = "BIO"
 
     async def build_add_ons(self):
@@ -48,78 +47,6 @@ class FallbackMacroMixin(BasicMacroMixin):
             else:
                 s(AbilityId.BUILD_REACTOR, queue=True)
 
-    async def build_depots(self):
-        depot_placement_positions = self.main_base_ramp.corner_depots
-
-        finished_depots = self.structures(UnitTypeId.SUPPLYDEPOT) | self.structures(
-            UnitTypeId.SUPPLYDEPOTLOWERED
-        )
-
-        # Filter finish depot locations
-        if finished_depots:
-            depot_placement_positions = {
-                d
-                for d in depot_placement_positions
-                if finished_depots.closest_distance_to(d) > 1
-            }
-
-        # Build depots
-        if (
-            self.can_afford(UnitTypeId.SUPPLYDEPOT)
-            and self.supply_left < 5 * len(self.townhalls.ready)
-            and self.already_pending(UnitTypeId.SUPPLYDEPOT)
-            < min(len(self.townhalls), 4)
-            and self.supply_cap < 200
-        ):
-            if len(depot_placement_positions) > 0:
-                target_depot_location = depot_placement_positions.pop()
-                await self.build_structure(
-                    UnitTypeId.SUPPLYDEPOT, target_depot_location
-                )
-            else:
-                max_minerals_left = 0
-
-                latest_cc = None
-                for cc in self.townhalls:
-                    mfs = self.mineral_field.closer_than(10, cc)
-                    if mfs:
-                        minerals_left = sum(map(lambda mf: mf.mineral_contents, mfs))
-                        if minerals_left > max_minerals_left:
-                            latest_cc = cc
-
-                if latest_cc is None and self.townhalls:
-                    latest_cc == random.choice(self.townhalls)
-
-                if latest_cc is not None:
-                    vg: Unit = random.choice(
-                        self.vespene_geyser.closer_than(10, latest_cc)
-                    )
-                    position = await self.find_placement(
-                        UnitTypeId.SUPPLYDEPOT,
-                        vg.position.towards(
-                            latest_cc,
-                            2
-                            * (
-                                1
-                                + len(
-                                    self.structures.filter(
-                                        lambda structure: structure.type_id
-                                        == UnitTypeId.SUPPLYDEPOT
-                                        or structure.type_id
-                                        == UnitTypeId.SUPPLYDEPOTLOWERED
-                                    ).closer_than(10, vg.position)
-                                )
-                            ),
-                        ),
-                    )
-
-                    if position is None:
-                        position = await self.find_placement(
-                            UnitTypeId.SUPPLYDEPOT, latest_cc.position
-                        )
-
-                    await self.build_structure(UnitTypeId.SUPPLYDEPOT, position)
-
     async def build_production(self):
         # 1-1-1 -> 3-1-1 -> 5-1-1 -> 5-2-1 -> 8-2-1
         # Rax, factories and starports per base.
@@ -153,27 +80,6 @@ class FallbackMacroMixin(BasicMacroMixin):
                     )
                 else:
                     await self.build_structure(building_id)
-
-    async def build_refineries(self):
-        for cc in self.townhalls.filter(lambda x: x.build_progress > 0.6):
-            scvs_at_this_cc = []
-            for scv in self.units(UnitTypeId.SCV):
-                if scv.position.to2.distance_to(cc.position.to2) < 11:
-                    scvs_at_this_cc.append(scv)
-
-            if len(scvs_at_this_cc) < (
-                16 + (len(self.structures(UnitTypeId.REFINERY).closer_than(11, cc)) * 3)
-            ):
-                # Don't build gas if minerals not saturated
-                # Don't build second gas until first gas saturated
-                return
-
-            for vg in self.vespene_geyser.closer_than(10, cc):
-                worker = self.select_build_worker(vg.position)
-                if worker is None:
-                    return
-
-                worker.build(UnitTypeId.REFINERY, vg)
 
     async def build_upgrade_buildings(self):
         if (
@@ -344,7 +250,7 @@ class FallbackMacroMixin(BasicMacroMixin):
         await self.build_depots()
         await self.build_add_ons()
         await self.build_units()
-        await self.build_refineries()
+        await self.build_refinery()
         await self.handle_upgrades()
         await self.expand()
         await self.build_defenses()

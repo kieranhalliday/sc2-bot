@@ -49,7 +49,7 @@ class CompetitiveBot(
         else:
             self.build_order_finished = True
 
-        print(f"Chosen bot {self.chosen_build_order.MIXIN_NAME}")
+        print(f"Chosen bot {self.chosen_build_order.BUILD_ORDER_NAME}")
         self.extend_bot_with_chosen_build_order_mixin()
 
     async def on_step(self, iteration: int):
@@ -78,8 +78,10 @@ class CompetitiveBot(
         Do things here after the game ends
         """
         print("Game ended.")
-        f = open("data/results.txt", "w")
-        f.write(f"Build order: {self.chosen_build_order.MIXIN_NAME}. Result: {result}.")
+        f = open("data/results.txt", "a")
+        f.write(
+            f"Build order: {self.chosen_build_order.BUILD_ORDER_NAME}. Result: {result}."
+        )
         f.close()
 
         print(result)

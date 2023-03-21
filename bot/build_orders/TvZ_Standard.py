@@ -7,7 +7,7 @@ from sc2.unit import Unit
 
 
 class TvZStandardBuildOrderMixin(BasicMacroMixin):
-    MIXIN_NAME: str = "TvZStandard"
+    BUILD_ORDER_NAME: str = "TvZStandard"
     FIRST_SCV_TAG = None
     WALL_DONE = False
     LATEST_CC = None
@@ -399,14 +399,14 @@ class TvZStandardBuildOrderMixin(BasicMacroMixin):
         await super().on_step(iteration)
 
         if len(self.build_order) == 0:
-            f = open("data/TvZStandard.txt", "w")
+            f = open("data/TvZStandard.txt", "a")
             f.write(
-                f"Build order {self.MIXIN_NAME} ended in {self.time_formatted} with supply {self.supply_used}"
+                f"Build order {self.BUILD_ORDER_NAME} ended in {self.time_formatted} with supply {self.supply_used}\n"
             )
             f.close()
 
             print(
-                f"Build order {self.MIXIN_NAME} ended in {self.time_formatted} with supply {self.supply_used}"
+                f"Build order {self.BUILD_ORDER_NAME} ended in {self.time_formatted} with supply {self.supply_used}\n"
             )
             return True
         else:

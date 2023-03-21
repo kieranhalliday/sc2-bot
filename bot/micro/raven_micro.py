@@ -6,8 +6,6 @@ from sc2.units import Units
 
 
 class RavenMicroMixin(BotAI):
-    MIXIN_NAME: str = "RavenMicro"
-
     async def raven_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         ravens: Units = self.units(UnitTypeId.RAVEN)
 
@@ -19,7 +17,11 @@ class RavenMicroMixin(BotAI):
             UnitTypeId.BATTLECRUISER,
         ]
 
-        enemy_mechanicals = self.enemy_units.filter(lambda unit: unit.is_mechanical)
+        enemy_mechanicals = self.enemy_units.filter(
+            lambda unit: unit.is_mechanical
+            and unit.type_id is not UnitTypeId.SCV
+            and unit.type_id is not UnitTypeId.PROBE
+        )
         priority_enemy_mechanicals = enemy_mechanicals.filter(
             lambda unit: unit.type_id in priority_units
         )

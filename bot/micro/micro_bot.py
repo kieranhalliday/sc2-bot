@@ -25,7 +25,6 @@ class MicroBotMixin(
     BansheeMicroMixin,
     HellionMicroMixin,
 ):
-    MIXIN_NAME: str = "MicroBot"
     MODE: Literal["attack", "defend"] = "defend"
 
     async def fight(self):

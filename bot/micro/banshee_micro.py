@@ -6,8 +6,6 @@ from sc2.units import Units
 
 
 class BansheeMicroMixin(BotAI):
-    MIXIN_NAME: str = "BansheeMicro"
-
     async def banshee_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         return
         # TODO: Implement

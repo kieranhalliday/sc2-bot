@@ -6,8 +6,6 @@ from sc2.units import Units
 
 
 class MedivacMicroMixin(BotAI):
-    MIXIN_NAME: str = "MedivacMicro"
-
     async def medivac_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         return
         # TODO: Implement

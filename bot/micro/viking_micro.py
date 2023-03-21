@@ -7,8 +7,6 @@ from sc2.units import Units
 
 
 class VikingMicroMixin(BotAI):
-    MIXIN_NAME: str = "VikingMicro"
-
     async def viking_micro(self, iteration: int, mode: Literal["attack", "defend"]):
         vikings: Units = self.units(UnitTypeId.VIKINGFIGHTER) + self.units(
             UnitTypeId.VIKINGASSAULT
