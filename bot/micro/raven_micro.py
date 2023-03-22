@@ -21,6 +21,7 @@ class RavenMicroMixin(BotAI):
             lambda unit: unit.is_mechanical
             and unit.type_id is not UnitTypeId.SCV
             and unit.type_id is not UnitTypeId.PROBE
+            and unit.type_id is not UnitTypeId.MULE
         )
         priority_enemy_mechanicals = enemy_mechanicals.filter(
             lambda unit: unit.type_id in priority_units

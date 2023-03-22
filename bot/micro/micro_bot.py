@@ -28,21 +28,20 @@ class MicroBotMixin(
     MODE: Literal["attack", "defend"] = "defend"
 
     async def fight(self):
-        pass
-        # if self.supply_army > 50:
-        #     self.MODE = "attack"
-        #     for u in self.units().idle.filter(
-        #         lambda unit: unit.type_id != UnitTypeId.SCV
-        #         and unit.type_id != UnitTypeId.MULE
-        #     ):
-        #         possible_attack_locations = self.enemy_start_locations
+        if self.supply_army > 100:
+            self.MODE = "attack"
+            for u in self.units().idle.filter(
+                lambda unit: unit.type_id != UnitTypeId.SCV
+                and unit.type_id != UnitTypeId.MULE
+            ):
+                possible_attack_locations = self.enemy_start_locations
 
-        #         if self.all_enemy_units:
-        #             possible_attack_locations.append(self.all_enemy_units.center)
+                if self.all_enemy_units:
+                    possible_attack_locations.append(self.all_enemy_units.center)
 
-        #         u.attack(random.choice(possible_attack_locations))
-        # else:
-        #     self.MODE = "defend"
+                u.attack(random.choice(possible_attack_locations))
+        else:
+            self.MODE = "defend"
 
     async def on_step_micro(self, iteration: int):
         await self.raven_micro(iteration, self.MODE)
