@@ -1,10 +1,10 @@
 import random
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Type, Union
 from bot.build_orders.TvT_Standard import TvTStandardBuildOrder
 
 from bot.build_orders.TvZ_Standard import TvZStandardBuildOrder
 from bot.macro.basic_macro_mixin import BasicMacroMixin
-from bot.types.add_on_movement import AddOnMovement
+from bot.types.add_on_movement import AddOnMovementType, AddOnType
 from sc2.data import Race
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
@@ -15,17 +15,22 @@ from sc2.unit import Unit
 class BuildOrderMixin(BasicMacroMixin):
     BUILD_ORDER: List[
         Tuple[
-            Union[UnitTypeId, AbilityId, AddOnMovement],
+            Union[
+                UnitTypeId,
+                AbilityId,
+                Tuple[UnitTypeId, AddOnMovementType, AddOnType],
+            ],
             Optional[Point2],
             Optional[bool],
         ]
     ] = None
     BUILD_ORDER_META: Dict[str, str] = None
-
     BUILD_ORDER_FINISHED = False
 
     FIRST_SCV_TAG = None
     RAMP_CAN_FIT_ADD_ON = False
+
+    last_build_order_step_success_time = 0
 
     async def on_unit_created(self, unit: Unit):
         if not self.FIRST_SCV_TAG and unit.type_id == UnitTypeId.SCV:
@@ -38,10 +43,14 @@ class BuildOrderMixin(BasicMacroMixin):
             return
 
         if unit.type_id == self.BUILD_ORDER[0][0]:
-            self.BUILD_ORDER.pop(0)
+            self.build_order_step_complete()
 
     def get_first_scv(self):
         return self.workers.find_by_tag(self.FIRST_SCV_TAG)
+
+    def build_order_step_complete(self):
+        self.last_build_order_step_success_time = self.time
+        self.BUILD_ORDER.pop(0)
 
     def rally_workers_and_mules(self):
         for cc in self.townhalls:
@@ -81,14 +90,14 @@ class BuildOrderMixin(BasicMacroMixin):
         for building in self.structures(structure_type_id).ready:
             if self.can_afford(unit_type_id):
                 building.train(unit_type_id)
-                self.BUILD_ORDER.pop(0)
+                self.build_order_step_complete()
 
-        if len(self.townhalls) > 0:
-            rally_point = self.townhalls.closest_to(
-                self.enemy_start_locations[0]
-            ).position.towards(self.game_info.map_center, 5)
+            if len(self.townhalls) > 0:
+                rally_point = self.townhalls.closest_to(
+                    self.enemy_start_locations[0]
+                ).position.towards(self.game_info.map_center, 5)
 
-            (AbilityId.RALLY_UNITS, rally_point)
+                building(AbilityId.RALLY_UNITS, rally_point)
 
     def build_order_upgrades(self, ability_id):
         upgrade_building = None
@@ -146,208 +155,95 @@ class BuildOrderMixin(BasicMacroMixin):
 
         if self.can_afford(ability_id):
             upgrade_building(ability_id)
-            self.BUILD_ORDER.pop(0)
+            self.build_order_step_complete()
 
     async def handle_add_on_movement(self, add_on_movement):
-        if add_on_movement == AddOnMovement.BARRACKS_LEAVE_REACTOR:
-            barracks = self.structures(UnitTypeId.BARRACKS).idle.filter(
-                lambda rax: rax.has_reactor
+        structure_to_move = add_on_movement[0]
+        movement_type = add_on_movement[1]
+        target_add_on = add_on_movement[2]
+
+        # Filter for strucutres without add on by default
+        filter_lambda = lambda structure: not structure.has_add_on
+
+        if target_add_on == AddOnType.REACTOR:
+            filter_lambda = lambda structure: structure.has_reactor
+        elif target_add_on == AddOnType.TECHLAB:
+            filter_lambda = lambda structure: structure.has_techlab
+
+        if movement_type == AddOnMovementType.LIFT:
+            structures = self.structures(structure_to_move).idle.ready.filter(
+                filter_lambda
             )
-            if barracks:
-                barracks.first(AbilityId.LIFT_BARRACKS)
-                self.BUILD_ORDER.pop(0)
+            if structures:
+                if structure_to_move == UnitTypeId.BARRACKS:
+                    structures.first(AbilityId.LIFT_BARRACKS)
+                elif structure_to_move == UnitTypeId.FACTORY:
+                    structures.first(AbilityId.LIFT_FACTORY)
+                elif structure_to_move == UnitTypeId.STARPORT:
+                    structures.first(AbilityId.LIFT_STARPORT)
+                self.build_order_step_complete()
+        elif movement_type == AddOnMovementType.LAND:
+            landing_ability = AbilityId.LAND_BARRACKS
+            if structure_to_move == UnitTypeId.FACTORYFLYING:
+                landing_ability = AbilityId.LAND_FACTORY
+            elif structure_to_move == UnitTypeId.STARPORTFLYING:
+                landing_ability = AbilityId.LAND_STARPORT
 
-        elif add_on_movement == AddOnMovement.BARRACKS_LEAVE_TECHLAB:
-            barracks = self.structures(UnitTypeId.BARRACKS).idle.filter(
-                lambda rax: rax.has_techlab
-            )
-            if barracks:
-                barracks.first(AbilityId.LIFT_BARRACKS)
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.BARRACKS_LIFT_EMPTY:
-            barracks = self.structures(UnitTypeId.BARRACKS).idle.filter(
-                lambda b: not b.has_add_on
-            )
-            if barracks:
-                barracks.first(AbilityId.LIFT_BARRACKS)
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.BARRACKS_LAND_REACTOR:
-            barracks = self.structures(UnitTypeId.BARRACKSFLYING)
-            free_reactors = self.structures(UnitTypeId.REACTOR).idle.filter(
-                lambda r: self.structures.not_flying.closest_distance_to(
-                    r.add_on_land_position
-                )
-                > 1
-            )
-            if barracks and free_reactors:
-                barracks.first(
-                    AbilityId.LAND_BARRACKS, free_reactors.first.add_on_land_position
-                )
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.BARRACKS_LAND_TECHLAB:
-            barracks = self.structures(UnitTypeId.BARRACKSFLYING)
-            free_tech_labs = self.structures(UnitTypeId.TECHLAB).idle.filter(
-                lambda r: self.structures.not_flying.closest_distance_to(
-                    r.add_on_land_position
-                )
-                > 1
-            )
-
-            if barracks and free_tech_labs:
-                barracks.first(
-                    AbilityId.LAND_BARRACKS, free_tech_labs.first.add_on_land_position
-                )
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.BARRACKS_LAND_EMPTY:
-            barracks = self.structures(UnitTypeId.BARRACKSFLYING)
-            if barracks:
-                new_position = await self.find_placement(
-                    UnitTypeId.BARRACKS, barracks.first.position, addon_place=True
-                )
-                if new_position is not None:
-                    barracks.first(
-                        AbilityId.LAND_BARRACKS,
-                        new_position,
+            # All these unit types should be the flying versions of the building
+            if target_add_on == AddOnType.EMPTY:
+                structures = self.structures(structure_to_move)
+                if structures:
+                    for placement_step in range(2, 5):
+                        new_position = await self.find_placement(
+                            UnitTypeId.BARRACKS,
+                            structures.first.position,
+                            addon_place=True,
+                            placement_step=placement_step,
+                        )
+                        if (
+                            new_position is not None
+                            and new_position.distance_to_closest(
+                                map(
+                                    lambda addon: addon.add_on_land_position,
+                                    self.structures(
+                                        {UnitTypeId.REACTOR, UnitTypeId.TECHLAB}
+                                    ),
+                                )
+                            )
+                            > 3
+                        ):
+                            structures.first(
+                                landing_ability,
+                                new_position,
+                            )
+                            self.build_order_step_complete()
+                            return
+            elif target_add_on == AddOnType.REACTOR:
+                structures = self.structures(structure_to_move)
+                free_reactors = self.structures(UnitTypeId.REACTOR).idle.ready.filter(
+                    lambda r: self.structures.not_flying.closest_distance_to(
+                        r.add_on_land_position
                     )
-                    self.BUILD_ORDER.pop(0)
-
-        # Factory Movements
-        elif add_on_movement == AddOnMovement.FACTORY_LEAVE_REACTOR:
-            factories = self.structures(UnitTypeId.FACTORY).idle.filter(
-                lambda factory: factory.has_reactor
-            )
-            if factories:
-                factories.first(AbilityId.LIFT_FACTORY)
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.FACTORY_LEAVE_TECHLAB:
-            factories = self.structures(UnitTypeId.FACTORY).idle.filter(
-                lambda factory: factory.has_techlab
-            )
-            if factories:
-                factories.first(AbilityId.LIFT_FACTORY)
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.FACTORY_LIFT_EMPTY:
-            factories = self.structures(UnitTypeId.FACTORY).idle.filter(
-                lambda f: not f.has_add_on
-            )
-            if factories:
-                factories.first(AbilityId.LIFT_FACTORY)
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.FACTORY_LAND_REACTOR:
-            factories = self.structures(UnitTypeId.FACTORYFLYING)
-            free_reactors = self.structures(UnitTypeId.REACTOR).idle.filter(
-                lambda r: self.structures.not_flying.closest_distance_to(
-                    r.add_on_land_position
+                    > 1
                 )
-                > 1
-            )
-            if factories and free_reactors:
-                factories.first(
-                    AbilityId.LAND_FACTORY, free_reactors.first.add_on_land_position
-                )
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.FACTORY_LAND_TECHLAB:
-            factories = self.structures(UnitTypeId.FACTORYFLYING)
-            free_tech_labs = self.structures(UnitTypeId.TECHLAB).idle.filter(
-                lambda r: self.structures.not_flying.closest_distance_to(
-                    r.add_on_land_position
-                )
-                > 1
-            )
-
-            if factories and free_tech_labs:
-                factories.first(
-                    AbilityId.LAND_FACTORY, free_tech_labs.first.add_on_land_position
-                )
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.FACTORY_LAND_EMPTY:
-            factories = self.structures(UnitTypeId.FACTORYFLYING)
-            if factories:
-                new_position = await self.find_placement(
-                    UnitTypeId.FACTORY, factories.first.position, addon_place=True
-                )
-                if new_position is not None:
-                    factories.first(
-                        AbilityId.LAND_FACTORY,
-                        new_position,
+                if structures and free_reactors:
+                    structures.first(
+                        landing_ability, free_reactors.first.add_on_land_position
                     )
-                    self.BUILD_ORDER.pop(0)
-
-        # Starport movements
-        elif add_on_movement == AddOnMovement.STARPORT_LEAVE_REACTOR:
-            starports = self.structures(UnitTypeId.STARPORT).idle.filter(
-                lambda starport: starport.has_reactor
-            )
-            if starports:
-                starports.first(AbilityId.LIFT_STARPORT)
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.STARPORT_LEAVE_TECHLAB:
-            starports = self.structures(UnitTypeId.STARPORT).idle.filter(
-                lambda starport: starport.has_techlab
-            )
-            if starports:
-                starports.first(AbilityId.LIFT_STARPORT)
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.STARPORT_LIFT_EMPTY:
-            starports = self.structures(UnitTypeId.STARPORT).idle.filter(
-                lambda f: not f.has_add_on
-            )
-            if starports:
-                starports.first(AbilityId.LIFT_STARPORT)
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.STARPORT_LAND_REACTOR:
-            starports = self.structures(UnitTypeId.STARPORTFLYING)
-            free_reactors = self.structures(UnitTypeId.REACTOR).idle.filter(
-                lambda r: self.structures.not_flying.closest_distance_to(
-                    r.add_on_land_position
-                )
-                > 1
-            )
-            if starports and free_reactors:
-                starports.first(
-                    AbilityId.LAND_STARPORT, free_reactors.first.add_on_land_position
-                )
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.STARPORT_LAND_TECHLAB:
-            starports = self.structures(UnitTypeId.STARPORTFLYING)
-            free_tech_labs = self.structures(UnitTypeId.TECHLAB).idle.filter(
-                lambda r: self.structures.not_flying.closest_distance_to(
-                    r.add_on_land_position
-                )
-                > 1
-            )
-
-            if starports and free_tech_labs:
-                starports.first(
-                    AbilityId.LAND_STARPORT, free_tech_labs.first.add_on_land_position
-                )
-                self.BUILD_ORDER.pop(0)
-
-        elif add_on_movement == AddOnMovement.STARPORT_LAND_EMPTY:
-            starports = self.structures(UnitTypeId.STARPORTFLYING)
-            if starports:
-                new_position = await self.find_placement(
-                    UnitTypeId.starports, starports.first.position, addon_place=True
-                )
-                if new_position is not None:
-                    starports.first(
-                        AbilityId.LAND_STARPORT,
-                        new_position,
+                    self.build_order_step_complete()
+            elif target_add_on == AddOnType.TECHLAB:
+                structures = self.structures(structure_to_move)
+                free_tech_labs = self.structures(UnitTypeId.TECHLAB).idle.ready.filter(
+                    lambda r: self.structures.not_flying.closest_distance_to(
+                        r.add_on_land_position
                     )
-                    self.BUILD_ORDER.pop(0)
+                    > 1
+                )
+                if structures and free_tech_labs:
+                    structures.first(
+                        landing_ability, free_tech_labs.first.add_on_land_position
+                    )
+                    self.build_order_step_complete()
 
     async def build_order_step(self):
         if len(self.BUILD_ORDER) > 0:
@@ -362,11 +258,27 @@ class BuildOrderMixin(BasicMacroMixin):
                 next_unit_pos = self.BUILD_ORDER[1]
                 is_builder_first_worker = self.BUILD_ORDER[2]
 
+            # Only attempt to build something for 60 seconds
+            if self.time - self.last_build_order_step_success_time > 60:
+                f = open(f"data/{self.BUILD_ORDER_META['name']}.txt", "a")
+                f.write(
+                    f"""Build order {self.BUILD_ORDER_META['name']} failed in {self.time_formatted} on building {next_unit}\n"""
+                )
+                f.close()
+
+                self.BUILD_ORDER_FINISHED = True
+                return
+
+            if self.supply_left < 4 and not self.already_pending(
+                UnitTypeId.SUPPLYDEPOT
+            ):
+                await self.build_depots(force=True)
+
             if next_unit in self.army_unit_type_ids:
                 self.build_order_units(next_unit)
             elif type(next_unit) is AbilityId:
                 self.build_order_upgrades(next_unit)
-            elif type(next_unit) is AddOnMovement:
+            elif type(next_unit) is tuple:
                 await self.handle_add_on_movement(next_unit)
             else:
                 # If next unit is a structure
@@ -377,8 +289,12 @@ class BuildOrderMixin(BasicMacroMixin):
                 ):
                     await self.expand_now()
 
-                elif next_unit == UnitTypeId.SUPPLYDEPOT and not self.already_pending(
-                    next_unit
+                elif (
+                    next_unit == UnitTypeId.SUPPLYDEPOT
+                    and not self.already_pending(next_unit)
+                ) or (
+                    self.supply_left < 4
+                    and not self.already_pending(UnitTypeId.SUPPLYDEPOT)
                 ):
                     await self.build_depots(force=True)
 
@@ -446,7 +362,7 @@ class BuildOrderMixin(BasicMacroMixin):
                             else:
                                 starport(AbilityId.BUILD_TECHLAB_STARPORT)
 
-                elif not self.already_pending(next_unit) and self.can_afford(next_unit):
+                elif self.can_afford(next_unit):
                     # Finish wall if not already finished
                     if (
                         self.structures.closest_distance_to(
@@ -509,14 +425,11 @@ class BuildOrderMixin(BasicMacroMixin):
 
             if len(self.BUILD_ORDER) == 0:
                 f = open(f"data/{self.BUILD_ORDER_META['name']}.txt", "a")
+                goal_time = self.BUILD_ORDER_META["goal_time_sec"]
                 f.write(
-                    f"Build order {self.BUILD_ORDER_META['name']} ended in {self.time_formatted} with supply {self.supply_used}\n"
+                    f"""Build order {self.BUILD_ORDER_META['name']} ended in {self.time_formatted} with supply {self.supply_used}. Seconds behind goal: {self.time} of {goal_time}\n"""
                 )
                 f.close()
-
-                print(
-                    f"Build order {self.BUILD_ORDER_META['name']} ended in {self.time_formatted} with supply {self.supply_used}"
-                )
                 self.BUILD_ORDER_FINISHED = True
             # except Exception as e:
             #     # Something failed, end build order

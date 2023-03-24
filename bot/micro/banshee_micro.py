@@ -7,23 +7,19 @@ from sc2.units import Units
 
 class BansheeMicroMixin(BotAI):
     async def banshee_micro(self, iteration: int, mode: Literal["attack", "defend"]):
-        return
-        # TODO: Implement
-        # tanks: Units = self.units(UnitTypeId.SIEGETANK) + self.units(
-        #     UnitTypeId.SIEGETANKSIEGED
-        # )
-        # if mode == "defend":
-        #     for tank in tanks.idle:
-        #         tank(AbilityId.SIEGEMODE_SIEGEMODE)
-        # else:
-        #     for tank in tanks:
-        #         if (
-        #             len(self.enemy_units) > 0
-        #             and self.enemy_units.closest_distance_to(tank.position) < 14
-        #         ) or (
-        #             len(self.enemy_structures) > 0
-        #             and self.enemy_structures.closest_distance_to(tank.position) < 14
-        #         ):
-        #             tank(AbilityId.SIEGEMODE_SIEGEMODE)
-        #         else:
-        #             tank(AbilityId.UNSIEGE_UNSIEGE)
+        banshees: Units = self.units(UnitTypeId.BANSHEE)
+        enemy_units = self.enemy_units.filter(lambda u: u.can_attack_air)
+        enemy_workers = self.enemy_units(
+            {UnitTypeId.SCV, UnitTypeId.DRONE, UnitTypeId.PROBE}
+        )
+
+        for banshee in banshees.idle:
+            if enemy_units.amount > 0 and enemy_units.closest_distance_to(banshee) < 7:
+                banshee(AbilityId.BEHAVIOR_CLOAKON_BANSHEE)
+            else:
+                banshee(AbilityId.BEHAVIOR_CLOAKOFF_BANSHEE)
+
+            if enemy_workers.amount == 0:
+                banshee.move(self.enemy_start_locations[0])
+            else:
+                banshee.attack(enemy_workers.closest_to(banshee))

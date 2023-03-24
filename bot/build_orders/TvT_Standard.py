@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional, Tuple, Union
-from bot.types.add_on_movement import AddOnMovement
+from bot.types.add_on_movement import AddOnMovementType, AddOnType
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
@@ -19,7 +19,11 @@ class TvTStandardBuildOrder(BotAI):
             Dict[str, str],
             List[
                 Tuple[
-                    Union[UnitTypeId, AbilityId, AddOnMovement],
+                    Union[
+                        UnitTypeId,
+                        AbilityId,
+                        Tuple[UnitTypeId, AddOnMovementType, AddOnType],
+                    ],
                     Optional[Point2],
                     Optional[bool],
                 ]
@@ -28,7 +32,10 @@ class TvTStandardBuildOrder(BotAI):
     ]:
         main_base_corner_depots = list(self.main_base_ramp.corner_depots)
         return {
-            "meta": {"name": "TvTStandardBuildOrder"},
+            "meta": {
+                "name": "TvTStandardBuildOrder",
+                "goal_time_sec": 297,
+            },
             "build": [
                 [UnitTypeId.SUPPLYDEPOT],
                 [UnitTypeId.BARRACKS],

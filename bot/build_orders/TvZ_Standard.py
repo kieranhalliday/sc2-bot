@@ -1,7 +1,6 @@
-import enum
 from typing import Dict, List, Optional, Tuple, Union
 
-from bot.types.add_on_movement import AddOnMovement
+from bot.types.add_on_movement import AddOnMovementType, AddOnType
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
@@ -17,7 +16,11 @@ class TvZStandardBuildOrder(BotAI):
             Dict[str, str],
             List[
                 Tuple[
-                    Union[UnitTypeId, AbilityId, AddOnMovement],
+                    Union[
+                        UnitTypeId,
+                        AbilityId,
+                        Tuple[UnitTypeId, AddOnMovementType, AddOnType],
+                    ],
                     Optional[Point2],
                     Optional[bool],
                 ]
@@ -26,7 +29,10 @@ class TvZStandardBuildOrder(BotAI):
     ]:
         main_base_corner_depots = list(self.main_base_ramp.corner_depots)
         return {
-            "meta": {"name": "TvZStandardBuildOrder"},
+            "meta": {
+                "name": "TvZStandardBuildOrder",
+                "goal_time_sec": 565,
+            },
             "build": [
                 # [Unit Id, position, first worker flag]
                 [UnitTypeId.SUPPLYDEPOT, main_base_corner_depots[0], True],
@@ -43,21 +49,27 @@ class TvZStandardBuildOrder(BotAI):
                 [UnitTypeId.FACTORY],
                 [UnitTypeId.BARRACKSREACTOR],
                 [UnitTypeId.COMMANDCENTER],
+                [(UnitTypeId.BARRACKS, AddOnMovementType.LIFT, AddOnType.REACTOR)],
+                [(UnitTypeId.FACTORY, AddOnMovementType.LIFT, AddOnType.EMPTY)],
+                [(UnitTypeId.FACTORYFLYING, AddOnMovementType.LAND, AddOnType.REACTOR)],
+                [(UnitTypeId.BARRACKSFLYING, AddOnMovementType.LAND, AddOnType.EMPTY)],
                 [UnitTypeId.STARPORT],
                 [UnitTypeId.REFINERY],
-                [AddOnMovement.BARRACKS_LEAVE_REACTOR],
-                [AddOnMovement.FACTORY_LIFT_EMPTY],
-                [AddOnMovement.FACTORY_LAND_REACTOR],
-                [AddOnMovement.BARRACKS_LAND_EMPTY],
                 [UnitTypeId.HELLION],
                 [UnitTypeId.HELLION],
                 [UnitTypeId.BARRACKSTECHLAB],
                 [UnitTypeId.HELLION],
                 [UnitTypeId.HELLION],
-                [AddOnMovement.STARPORT_LIFT_EMPTY],
-                [AddOnMovement.BARRACKS_LEAVE_TECHLAB],
-                [AddOnMovement.STARPORT_LAND_TECHLAB],
-                [AddOnMovement.BARRACKS_LAND_EMPTY],
+                [(UnitTypeId.STARPORT, AddOnMovementType.LIFT, AddOnType.EMPTY)],
+                [(UnitTypeId.BARRACKS, AddOnMovementType.LIFT, AddOnType.TECHLAB)],
+                [
+                    (
+                        UnitTypeId.STARPORTFLYING,
+                        AddOnMovementType.LAND,
+                        AddOnType.TECHLAB,
+                    )
+                ],
+                [(UnitTypeId.BARRACKSFLYING, AddOnMovementType.LAND, AddOnType.EMPTY)],
                 [UnitTypeId.BANSHEE],
                 [AbilityId.RESEARCH_BANSHEECLOAKINGFIELD],
                 [UnitTypeId.SUPPLYDEPOT],
@@ -71,8 +83,8 @@ class TvZStandardBuildOrder(BotAI):
                 [AbilityId.BARRACKSTECHLABRESEARCH_STIMPACK],
                 [UnitTypeId.BANSHEE],
                 [UnitTypeId.REFINERY],
-                [AddOnMovement.FACTORY_LEAVE_REACTOR],
-                [AddOnMovement.FACTORY_LAND_EMPTY],
+                [(UnitTypeId.FACTORY, AddOnMovementType.LIFT, AddOnType.REACTOR)],
+                [(UnitTypeId.FACTORYFLYING, AddOnMovementType.LAND, AddOnType.EMPTY)],
                 [UnitTypeId.FACTORYREACTOR],
                 # One rax is built on reactor that factory left
                 [UnitTypeId.BARRACKS],
@@ -83,13 +95,19 @@ class TvZStandardBuildOrder(BotAI):
                 [UnitTypeId.ENGINEERINGBAY],
                 [UnitTypeId.ENGINEERINGBAY],
                 [UnitTypeId.MARINE],
-                [AddOnMovement.STARPORT_LEAVE_TECHLAB],
-                [AddOnMovement.STARPORT_LAND_EMPTY],
+                [(UnitTypeId.STARPORT, AddOnMovementType.LIFT, AddOnType.TECHLAB)],
+                [(UnitTypeId.STARPORTFLYING, AddOnMovementType.LAND, AddOnType.EMPTY)],
                 [UnitTypeId.STARPORTREACTOR],
-                [AddOnMovement.FACTORY_LEAVE_REACTOR],
-                [AddOnMovement.FACTORY_LAND_TECHLAB],
-                [AddOnMovement.BARRACKS_LIFT_EMPTY],
-                [AddOnMovement.BARRACKS_LAND_REACTOR],
+                [(UnitTypeId.FACTORY, AddOnMovementType.LIFT, AddOnType.REACTOR)],
+                [(UnitTypeId.FACTORYFLYING, AddOnMovementType.LAND, AddOnType.TECHLAB)],
+                [(UnitTypeId.BARRACKS, AddOnMovementType.LIFT, AddOnType.EMPTY)],
+                [
+                    (
+                        UnitTypeId.BARRACKSFLYING,
+                        AddOnMovementType.LAND,
+                        AddOnType.REACTOR,
+                    )
+                ],
                 [UnitTypeId.MARINE],
                 [AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYWEAPONSLEVEL1],
                 [UnitTypeId.BARRACKS],

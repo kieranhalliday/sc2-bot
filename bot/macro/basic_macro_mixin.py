@@ -45,7 +45,9 @@ class BasicMacroMixin(MacroHelpersMixin):
             elif len(self.structures(UnitTypeId.ENGINEERINGBAY)) > 0:
                 cc(AbilityId.UPGRADETOPLANETARYFORTRESS_PLANETARYFORTRESS)
 
-            if self.units(UnitTypeId.SCV).amount < self.townhalls.amount * 22 and (
+            if self.units(UnitTypeId.SCV).amount < min(
+                self.townhalls.amount * 22, 88
+            ) and (
                 cc.is_idle
                 or (
                     self.already_pending(UnitTypeId.SCV, [cc]) < 2
@@ -154,19 +156,33 @@ class BasicMacroMixin(MacroHelpersMixin):
 
     async def land_flying_buildings_with_add_on_space(self):
         # Find new positions for buildings without add on space
+        # Don't land too close to a different add on position unless told to
         for structure in (
             self.structures(UnitTypeId.BARRACKSFLYING).idle
             + self.structures(UnitTypeId.FACTORYFLYING).idle
             + self.structures(UnitTypeId.STARPORTFLYING).idle
         ):
-            new_position = await self.find_placement(
-                UnitTypeId.BARRACKS, structure.position, addon_place=True
-            )
-            if new_position is not None:
-                structure(
-                    AbilityId.LAND,
-                    new_position,
+            for placement_step in range(2, 5):
+                new_position = await self.find_placement(
+                    UnitTypeId.BARRACKS,
+                    structure.position,
+                    addon_place=True,
+                    placement_step=placement_step,
                 )
+                if (
+                    new_position is not None
+                    and new_position.distance_to_closest(
+                        map(
+                            lambda addon: addon.add_on_land_position,
+                            self.structures({UnitTypeId.REACTOR, UnitTypeId.TECHLAB}),
+                        )
+                    )
+                    > 3
+                ):
+                    structure(
+                        AbilityId.LAND,
+                        new_position,
+                    )
 
     async def build_add_ons(self):
         for b in self.structures(UnitTypeId.BARRACKS):
