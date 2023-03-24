@@ -4,6 +4,7 @@ from bot.micro.banshee_micro import BansheeMicroMixin
 from bot.micro.hellion_micro import HellionMicroMixin
 
 from bot.micro.marine_micro import MarineMicroMixin
+from bot.micro.maurader_micro import MarauderMicroMixin
 from bot.micro.medivac_micro import MedivacMicroMixin
 from bot.micro.raven_micro import RavenMicroMixin
 from bot.micro.reaper_micro import ReaperMicroMixin
@@ -24,11 +25,15 @@ class MicroBotMixin(
     MedivacMicroMixin,
     BansheeMicroMixin,
     HellionMicroMixin,
+    MarauderMicroMixin,
 ):
     MODE: Literal["attack", "defend"] = "defend"
 
+    def set_mode(self, mode: Literal["attack", "defend"]):
+        self.MODE = mode
+
     async def fight(self):
-        if self.supply_army > 100:
+        if self.supply_army > 80 or self.MODE == "attack":
             self.MODE = "attack"
             for u in self.units().idle.filter(
                 lambda unit: unit.type_id != UnitTypeId.SCV
@@ -47,6 +52,7 @@ class MicroBotMixin(
         await self.raven_micro(iteration, self.MODE)
         await self.reaper_micro(iteration, self.MODE)
         await self.marine_micro(iteration, self.MODE)
+        await self.marauder_micro(iteration, self.MODE)
         await self.tank_micro(iteration, self.MODE)
         await self.viking_micro(iteration, self.MODE)
         await self.medivac_micro(iteration, self.MODE)

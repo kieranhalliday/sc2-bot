@@ -13,12 +13,13 @@ class BansheeMicroMixin(BotAI):
             {UnitTypeId.SCV, UnitTypeId.DRONE, UnitTypeId.PROBE}
         )
 
-        for banshee in banshees.idle:
+        for banshee in banshees:
             if enemy_units.amount > 0 and enemy_units.closest_distance_to(banshee) < 7:
                 banshee(AbilityId.BEHAVIOR_CLOAKON_BANSHEE)
             else:
                 banshee(AbilityId.BEHAVIOR_CLOAKOFF_BANSHEE)
 
+        for banshee in banshees.idle:
             if enemy_workers.amount == 0:
                 banshee.move(self.enemy_start_locations[0])
             else:

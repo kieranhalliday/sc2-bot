@@ -93,7 +93,7 @@ def parse_arguments():
     parser.add_argument(
         "--ComputerRace",
         type=str,
-        default="Zerg",
+        default="Protoss",
         help="Computer race. One of [Terran, Zerg, Protoss, Random]. Default is Terran. Only for local play.",
     )
     parser.add_argument(

@@ -24,7 +24,9 @@ class CompetitiveBot(MicroBotMixin, ReactiveBotMixin, BuildOrderMixin):
         Populate this function with whatever your bot should do!
         """
 
-        await self.build_order_on_step(iteration)
+        micro_mode = await self.build_order_on_step(iteration)
+        if micro_mode in ["attack", "defend"]:
+            self.set_mode(micro_mode)
         await self.on_step_micro(iteration)
 
     async def on_end(self, result: Result):

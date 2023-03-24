@@ -45,13 +45,19 @@ class BasicMacroMixin(MacroHelpersMixin):
             elif len(self.structures(UnitTypeId.ENGINEERINGBAY)) > 0:
                 cc(AbilityId.UPGRADETOPLANETARYFORTRESS_PLANETARYFORTRESS)
 
-            if self.units(UnitTypeId.SCV).amount < min(
-                self.townhalls.amount * 22, 88
-            ) and (
-                cc.is_idle
-                or (
-                    self.already_pending(UnitTypeId.SCV, [cc]) < 2
-                    and self.unit_build_progress(cc, UnitTypeId.SCV) > 0.6
+            if (
+                self.units(UnitTypeId.SCV).amount < min(self.townhalls.amount * 22, 88)
+                and (
+                    cc.is_idle
+                    or (
+                        self.already_pending(UnitTypeId.SCV, [cc]) < 2
+                        and self.unit_build_progress(cc, UnitTypeId.SCV) > 0.6
+                    )
+                )
+                and not (
+                    # If it isn't an orbital but barracks exist
+                    cc.energy_max == 0
+                    and self.structures(UnitTypeId.BARRACKS).amount > 0
                 )
             ):
                 cc.train(UnitTypeId.SCV)

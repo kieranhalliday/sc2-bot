@@ -20,6 +20,7 @@ class TvTStandardBuildOrder(BotAI):
             List[
                 Tuple[
                     Union[
+                        str,
                         UnitTypeId,
                         AbilityId,
                         Tuple[UnitTypeId, AddOnMovementType, AddOnType],

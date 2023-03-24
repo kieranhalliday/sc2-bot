@@ -1,5 +1,6 @@
 import random
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import Dict, List, Optional, Tuple, Union
+from bot.build_orders.TvP_3rax import TvP3RaxBuildOrder
 from bot.build_orders.TvT_Standard import TvTStandardBuildOrder
 
 from bot.build_orders.TvZ_Standard import TvZStandardBuildOrder
@@ -16,6 +17,7 @@ class BuildOrderMixin(BasicMacroMixin):
     BUILD_ORDER: List[
         Tuple[
             Union[
+                str,
                 UnitTypeId,
                 AbilityId,
                 Tuple[UnitTypeId, AddOnMovementType, AddOnType],
@@ -29,6 +31,7 @@ class BuildOrderMixin(BasicMacroMixin):
 
     FIRST_SCV_TAG = None
     RAMP_CAN_FIT_ADD_ON = False
+    COMBAT_MODE = "defend"
 
     last_build_order_step_success_time = 0
 
@@ -87,28 +90,38 @@ class BuildOrderMixin(BasicMacroMixin):
         ]:
             structure_type_id = UnitTypeId.STARPORT
 
-        for building in self.structures(structure_type_id).ready:
-            if self.can_afford(unit_type_id):
-                building.train(unit_type_id)
-                self.build_order_step_complete()
+        available_structures = self.structures(structure_type_id).ready.filter(
+            lambda s: s.is_idle
+            or (s.has_reactor and self.already_pending(unit_type_id, [s]) < 2)
+        )
 
-            if len(self.townhalls) > 0:
-                rally_point = self.townhalls.closest_to(
-                    self.enemy_start_locations[0]
-                ).position.towards(self.game_info.map_center, 5)
+        if not available_structures:
+            return
 
-                building(AbilityId.RALLY_UNITS, rally_point)
+        building = available_structures.first
+
+        if self.can_afford(unit_type_id):
+            building.train(unit_type_id)
+            self.build_order_step_complete()
+
+        if len(self.townhalls) > 0:
+            rally_point = self.townhalls.closest_to(
+                self.enemy_start_locations[0]
+            ).position.towards(self.game_info.map_center, 5)
+
+            building(AbilityId.RALLY_UNITS, rally_point)
 
     def build_order_upgrades(self, ability_id):
         upgrade_building = None
-
         if ability_id in [
             AbilityId.RESEARCH_COMBATSHIELD,
             AbilityId.RESEARCH_CONCUSSIVESHELLS,
             AbilityId.BARRACKSTECHLABRESEARCH_STIMPACK,
         ]:
-            if self.structures(UnitTypeId.BARRACKSTECHLAB):
-                upgrade_building = self.structures(UnitTypeId.BARRACKSTECHLAB).first
+            if self.structures(UnitTypeId.BARRACKSTECHLAB).idle.ready:
+                upgrade_building = self.structures(
+                    UnitTypeId.BARRACKSTECHLAB
+                ).idle.ready.first
 
         elif ability_id in [
             AbilityId.RESEARCH_INFERNALPREIGNITER,
@@ -116,15 +129,19 @@ class BuildOrderMixin(BasicMacroMixin):
             AbilityId.RESEARCH_SMARTSERVOS,
             AbilityId.RESEARCH_CYCLONELOCKONDAMAGE,
         ]:
-            if self.structures(UnitTypeId.STARPORTTECHLAB):
-                upgrade_building = self.structures(UnitTypeId.FACTORYTECHLAB).first
+            if self.structures(UnitTypeId.FACTORYTECHLAB).idle.ready:
+                upgrade_building = self.structures(
+                    UnitTypeId.FACTORYTECHLAB
+                ).idle.ready.first
 
-        if ability_id in [
+        elif ability_id in [
             AbilityId.RESEARCH_BANSHEECLOAKINGFIELD,
             AbilityId.RESEARCH_BANSHEEHYPERFLIGHTROTORS,
         ]:
-            if self.structures(UnitTypeId.STARPORTTECHLAB):
-                upgrade_building = self.structures(UnitTypeId.STARPORTTECHLAB).first
+            if self.structures(UnitTypeId.STARPORTTECHLAB).idle.ready:
+                upgrade_building = self.structures(
+                    UnitTypeId.STARPORTTECHLAB
+                ).idle.ready.first
 
         elif ability_id in [
             AbilityId.ENGINEERINGBAYRESEARCH_TERRANINFANTRYWEAPONSLEVEL1,
@@ -136,8 +153,10 @@ class BuildOrderMixin(BasicMacroMixin):
             AbilityId.RESEARCH_HISECAUTOTRACKING,
             AbilityId.RESEARCH_NEOSTEELFRAME,
         ]:
-            if self.structures(UnitTypeId.ENGINEERINGBAY):
-                upgrade_building = self.structures(UnitTypeId.ENGINEERINGBAY).idle.first
+            if self.structures(UnitTypeId.ENGINEERINGBAY).idle.ready:
+                upgrade_building = self.structures(
+                    UnitTypeId.ENGINEERINGBAY
+                ).idle.ready.first
 
         elif ability_id in [
             AbilityId.ARMORYRESEARCH_TERRANVEHICLEANDSHIPPLATINGLEVEL1,
@@ -150,11 +169,11 @@ class BuildOrderMixin(BasicMacroMixin):
             AbilityId.ARMORYRESEARCH_TERRANVEHICLEWEAPONSLEVEL2,
             AbilityId.ARMORYRESEARCH_TERRANVEHICLEWEAPONSLEVEL3,
         ]:
-            if self.structures(UnitTypeId.ARMORY):
-                upgrade_building = self.structures(UnitTypeId.ARMORY).idle.first
+            if self.structures(UnitTypeId.ARMORY).idle.ready:
+                upgrade_building = self.structures(UnitTypeId.ARMORY).idle.ready.first
 
-        if self.can_afford(ability_id):
-            upgrade_building(ability_id)
+        if upgrade_building is not None and self.can_afford(ability_id):
+            upgrade_building(ability_id, can_afford_check=True)
             self.build_order_step_complete()
 
     async def handle_add_on_movement(self, add_on_movement):
@@ -251,22 +270,27 @@ class BuildOrderMixin(BasicMacroMixin):
             next_unit = next_step[0]
             next_unit_pos = None
             is_builder_first_worker = False
-
             if len(next_step) == 2:
                 next_unit_pos = self.BUILD_ORDER[1]
             if len(next_step) == 3:
                 next_unit_pos = self.BUILD_ORDER[1]
                 is_builder_first_worker = self.BUILD_ORDER[2]
 
-            # Only attempt to build something for 60 seconds
-            if self.time - self.last_build_order_step_success_time > 60:
+            # Only attempt to build something for 90 seconds
+            if self.time - self.last_build_order_step_success_time > 90:
                 f = open(f"data/{self.BUILD_ORDER_META['name']}.txt", "a")
                 f.write(
                     f"""Build order {self.BUILD_ORDER_META['name']} failed in {self.time_formatted} on building {next_unit}\n"""
                 )
                 f.close()
-
+                self.COMBAT_MODE = False
                 self.BUILD_ORDER_FINISHED = True
+                return
+
+            if next_step[0] in ["attack", "defend"]:
+                # Tell the micro bot to change modes
+                self.COMBAT_MODE = next_step[0]
+                self.build_order_step_complete()
                 return
 
             if self.supply_left < 4 and not self.already_pending(
@@ -384,7 +408,7 @@ class BuildOrderMixin(BasicMacroMixin):
         Do things here before the game starts
         """
         tvt_build_orders = [TvTStandardBuildOrder]
-        tvp_build_orders = [TvTStandardBuildOrder]
+        tvp_build_orders = [TvP3RaxBuildOrder]
         tvz_build_orders = [TvZStandardBuildOrder]
         chosen_build_order = None
 
@@ -410,30 +434,31 @@ class BuildOrderMixin(BasicMacroMixin):
         if not self.BUILD_ORDER_FINISHED:
             self.RAMP_CAN_FIT_ADD_ON = self.main_base_ramp.barracks_can_fit_addon
 
-            # try:
-            self.rally_workers_and_mules()
-            await self.build_order_step()
+            try:
+                self.rally_workers_and_mules()
+                await self.build_order_step()
 
-            # TODO: remove this when speed mining is implemented
-            if self.structures(UnitTypeId.FACTORY).amount < 1:
-                for refinery in self.gas_buildings.ready:
-                    if refinery.assigned_harvesters < 3:
-                        for worker in self.workers.closest_n_units(
-                            refinery.position, 3 - refinery.assigned_harvesters
-                        ):
-                            worker.gather(refinery)
+                # TODO: remove this when speed mining is implemented
+                if self.structures(UnitTypeId.FACTORY).amount < 1:
+                    for refinery in self.gas_buildings.ready:
+                        if refinery.assigned_harvesters < 3:
+                            for worker in self.workers.closest_n_units(
+                                refinery.position, 3 - refinery.assigned_harvesters
+                            ):
+                                worker.gather(refinery)
 
-            if len(self.BUILD_ORDER) == 0:
-                f = open(f"data/{self.BUILD_ORDER_META['name']}.txt", "a")
-                goal_time = self.BUILD_ORDER_META["goal_time_sec"]
-                f.write(
-                    f"""Build order {self.BUILD_ORDER_META['name']} ended in {self.time_formatted} with supply {self.supply_used}. Seconds behind goal: {self.time} of {goal_time}\n"""
-                )
-                f.close()
+                if len(self.BUILD_ORDER) == 0:
+                    f = open(f"data/{self.BUILD_ORDER_META['name']}.txt", "a")
+                    goal_time = self.BUILD_ORDER_META["goal_time_sec"]
+                    f.write(
+                        f"""Build order {self.BUILD_ORDER_META['name']} ended in {self.time_formatted} with supply {self.supply_used}. Seconds behind goal: {self.time} of {goal_time}\n"""
+                    )
+                    f.close()
+                    self.BUILD_ORDER_FINISHED = True
+            except Exception as e:
+                # Something failed, end build order
+                print("Build order failed ", e)
                 self.BUILD_ORDER_FINISHED = True
-            # except Exception as e:
-            #     # Something failed, end build order
-            #     print("Build order failed ", e)
-            #     self.BUILD_ORDER_FINISHED = True
 
         await super().on_step(iteration, build_order_finished=self.BUILD_ORDER_FINISHED)
+        return self.COMBAT_MODE

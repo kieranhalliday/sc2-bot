@@ -7,21 +7,10 @@ from sc2.ids.ability_id import AbilityId
 from sc2.ids.upgrade_id import UpgradeId
 
 
-class MarineMicroMixin(BotAI):
-    async def marine_micro(self, iteration: int, mode: Literal["attack", "defend"]):
-        if mode == "defend":
-            for bunker in self.structures(UnitTypeId.BUNKER).filter(
-                lambda b: b.cargo_left > 0
-            ):
-                for unit in self.units(UnitTypeId.MARINE).idle.closest_n_units(
-                    bunker.position, 4
-                ):
-                    unit.smart(bunker)
-
-        else:
-            for bunker in self.structures(UnitTypeId.BUNKER):
-                bunker(AbilityId.UNLOADALL_BUNKER)
-            for unit in self.units(UnitTypeId.MARINE):
+class MarauderMicroMixin(BotAI):
+    async def marauder_micro(self, iteration: int, mode: Literal["attack", "defend"]):
+        if mode == "attack":
+            for unit in self.units(UnitTypeId.MARAUDER):
                 if self.enemy_units:
                     # attack (or move towards) zerglings / banelings
                     if unit.weapon_cooldown <= self.client.game_step / 2:

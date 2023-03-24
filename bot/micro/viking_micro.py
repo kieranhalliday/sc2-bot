@@ -18,6 +18,7 @@ class VikingMicroMixin(BotAI):
             UnitTypeId.CARRIER,
             UnitTypeId.TEMPEST,
             UnitTypeId.BROODLORD,
+            UnitTypeId.COLOSSUS,
         ]
 
         flying_units = self.enemy_units.filter(lambda unit: unit.is_flying)

@@ -34,3 +34,19 @@ class ReactiveBotMixin(BotAI):
             if worker is None or worker.distance_to(unit) > 20:
                 return
             worker.repair(unit)
+
+    async def on_enemy_unit_entered_vision(self, unit: Unit):
+        idle_combat_units = self.units.filter(
+            lambda u: unit.type_id is not UnitTypeId.SCV
+        ).idle
+
+        if unit.cloak:
+            for detector in idle_combat_units.filter(lambda u: unit.is_detector):
+                detector.move(unit)
+
+        if unit.is_flying:
+            for idle_unit in idle_combat_units.filter(lambda u: u.can_attack_air):
+                idle_unit.attack(unit)
+        elif unit.is_flying:
+            for idle_unit in idle_combat_units.filter(lambda u: u.can_attack_ground):
+                idle_unit.attack(unit)
