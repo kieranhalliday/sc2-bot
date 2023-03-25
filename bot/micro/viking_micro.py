@@ -32,7 +32,7 @@ class VikingMicroMixin(BotAI):
                     v.attack(priority_flying_units.closest_to(v))
                 elif flying_units.amount > 0:
                     v.attack(flying_units.closest_to(v))
-            elif flying_units.amount > 0 and flying_units.closest_to(v) < 9:
+            elif flying_units.amount > 0 and flying_units.closest_distance_to(v) < 9:
                 stutter_step_positions = Helpers.position_around_unit(
                     v,
                     self.game_info.pathing_grid.width,
